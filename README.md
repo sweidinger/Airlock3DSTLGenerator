@@ -16,12 +16,11 @@ Ausführliches Konzept: siehe [`ARCHITECTURE.md`](ARCHITECTURE.md).
 - API-Key-Authentifizierung, Idempotenz-Schlüssel, Batch-Limit.
 - Automatische OpenAPI-Doku unter `/docs`.
 
-## Basis-Vorlage
+## Voraussetzung: Basis-Vorlage
 
-Die leere Basis-STL `templates/DisposableLock_v2.stl` ist **im Repository enthalten** —
-der Generator und die Tests laufen out-of-the-box. Du kannst sie durch deine eigene
-Konstruktionsdatei ersetzen; die gegen die Vorlage validierten Präge-Parameter stehen
-in `app/config.py` (`TemplateProfile`) und in `ARCHITECTURE.md` §2.
+Die leere Basis-STL `templates/DisposableLock_v2.stl` ist **nicht im Git-Verlauf**
+enthalten (Binärdatei). Lege sie vor dem Start bzw. vor den Tests dort ab — sie
+liegt dem Auslieferungs-ZIP bei. Details: `templates/README.md`.
 
 ## Schnellstart (Docker)
 
@@ -96,6 +95,7 @@ Bereits vergebene Codes werden als `conflicts` gemeldet (Status `partial`).
 |---|---|---|
 | `AIRLOCK_API_KEY` | `change-me-in-production` | Gemeinsames Geheimnis |
 | `AIRLOCK_MAX_BATCH` | `200` | Max. Locks pro Batch |
+| `AIRLOCK_UI_AUTOKEY` | `0` | `1` = API-Key ins Dashboard injizieren (Auto-Connect, Key im Quelltext sichtbar → nur im vertrauten LAN) |
 | `AIRLOCK_OUTPUT_DIR` | `./output` | Ausgabe-Volume (STLs, ZIPs) |
 | `AIRLOCK_DB_PATH` | `./data/registry.db` | SQLite-Registry |
 | `AIRLOCK_CODE_LENGTH` | `5` | Stellenzahl der Codes |

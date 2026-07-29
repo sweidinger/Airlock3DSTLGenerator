@@ -95,6 +95,13 @@ def test_dashboard_served():
     assert "Airlock-STL-Generator" in r.text
 
 
+def test_dashboard_no_key_leak_by_default():
+    # Ohne AIRLOCK_UI_AUTOKEY darf der Key-WERT NICHT im Seitenquelltext stehen.
+    r = client.get("/")
+    assert "test-key" not in r.text
+    assert "window.__AIRLOCK_KEY__=" not in r.text  # kein injiziertes Key-Script
+
+
 def test_stats():
     client.post("/v1/airlocks:generate", json={"count": 2}, headers=AUTH)
     s = client.get("/v1/stats", headers=AUTH)

@@ -1,6 +1,7 @@
 """FastAPI-App: REST-Schnittstelle des Airlock-Generators."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
@@ -37,7 +38,13 @@ def dashboard():
     index = _STATIC_DIR / "index.html"
     if not index.is_file():
         raise HTTPException(404, "Dashboard nicht gefunden.")
-    return HTMLResponse(index.read_text(encoding="utf-8"))
+    html = index.read_text(encoding="utf-8")
+    # Optional: API-Key ins Dashboard injizieren (AIRLOCK_UI_AUTOKEY=1).
+    # Achtung: Key ist dann im Seitenquelltext sichtbar -> nur im vertrauten LAN.
+    if settings.ui_autokey:
+        inject = f"<script>window.__AIRLOCK_KEY__={json.dumps(settings.api_key)};</script>"
+        html = html.replace("</head>", inject + "\n</head>", 1)
+    return HTMLResponse(html)
 
 
 # ---- Health (ohne Auth) ----------------------------------------------
@@ -185,6 +192,7 @@ def config():
         "output_dir": str(settings.output_dir),
         "openscad_bin": settings.openscad_bin,
         "render_timeout": settings.render_timeout,
+        "ui_autokey": settings.ui_autokey,
         "profile": {
             "name": p.name,
             "font": p.font,

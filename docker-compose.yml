@@ -5,6 +5,7 @@ services:
     environment:
       - AIRLOCK_API_KEY=${AIRLOCK_API_KEY:?bitte in .env setzen}
       - AIRLOCK_MAX_BATCH=${AIRLOCK_MAX_BATCH:-200}
+      - AIRLOCK_UI_AUTOKEY=${AIRLOCK_UI_AUTOKEY:-0}
       - AIRLOCK_OUTPUT_DIR=/app/output
       - AIRLOCK_DB_PATH=/app/data/registry.db
     volumes:

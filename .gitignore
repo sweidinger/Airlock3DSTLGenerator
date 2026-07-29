@@ -12,3 +12,4 @@ output/*
 .env
 build.log
 docker-compose.override.yml
+redeploy.log

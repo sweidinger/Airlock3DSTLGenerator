@@ -66,7 +66,7 @@
   <span class="dot" id="healthDot"></span>
   <h1>Airlock-STL-Generator</h1>
   <span class="muted" id="tplName">—</span>
-  <div class="conn">
+  <div class="conn" id="connControls">
     <input id="baseUrl" style="width:180px" placeholder="Basis-URL (leer = hier)">
     <input id="apiKey" type="password" style="width:190px" placeholder="API-Key (X-API-Key)">
     <button id="connectBtn">Verbinden</button>
@@ -301,6 +301,12 @@ $('#filterStatus').onchange = refreshAirlocks;
 $('#apiKey').addEventListener('keydown',e=>{if(e.key==='Enter')connect();});
 $('#baseUrl').value = localStorage.getItem('airlock_base')||'';
 $('#apiKey').value = localStorage.getItem('airlock_key')||'';
+// Vom Server injizierter Key (AIRLOCK_UI_AUTOKEY=1) hat Vorrang -> Auto-Verbinden.
+// Dann sind Basis-URL/Key-Felder überflüssig und werden ausgeblendet.
+if(window.__AIRLOCK_KEY__){
+  $('#apiKey').value = window.__AIRLOCK_KEY__;
+  $('#connControls').style.display = 'none';
+}
 if($('#apiKey').value) connect();
 </script>
 </body>

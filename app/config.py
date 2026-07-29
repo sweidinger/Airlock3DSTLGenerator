@@ -54,6 +54,11 @@ class Settings:
     code_length: int = int(os.environ.get("AIRLOCK_CODE_LENGTH", "5"))
     openscad_bin: str = os.environ.get("OPENSCAD_BIN", "openscad")
     render_timeout: int = int(os.environ.get("AIRLOCK_RENDER_TIMEOUT", "120"))
+    # Wenn aktiv, spritzt der Server den API-Key ins Dashboard (Null-Tippen).
+    # ACHTUNG: Key ist dann im Seitenquelltext sichtbar -> nur im vertrauten LAN.
+    ui_autokey: bool = os.environ.get("AIRLOCK_UI_AUTOKEY", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
     profile: TemplateProfile = field(default_factory=TemplateProfile)
 
     @property
