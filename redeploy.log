@@ -1,50 +1,64 @@
-time="2026-07-29T23:04:14+02:00" level=warning msg="Docker Compose requires buildx plugin to be installed"
+time="2026-07-29T23:22:15+02:00" level=warning msg="Docker Compose requires buildx plugin to be installed"
  Image airlock-stl-generator:latest Building 
  Image airlock-stl-generator:latest Building 
-Sending build context to Docker daemon  524.4kBSending build context to Docker daemon  906.4kB
-Step 1/13 : FROM python:3.12-slim
+Sending build context to Docker daemon  524.4kBSending build context to Docker daemon  937.8kB
+Step 1/17 : FROM python:3.12-slim
  ---> 25c5b8011a34
-Step 2/13 : RUN apt-get update && apt-get install -y --no-install-recommends         openscad         fonts-liberation         fonts-dejavu-core         curl     && rm -rf /var/lib/apt/lists/*
+Step 2/17 : RUN apt-get update && apt-get install -y --no-install-recommends         openscad         fonts-liberation         fonts-dejavu-core         curl     && rm -rf /var/lib/apt/lists/*
  ---> Using cache
  ---> 7b2e43ffb449
-Step 3/13 : WORKDIR /app
+Step 3/17 : WORKDIR /app
  ---> Using cache
  ---> 16a293053500
-Step 4/13 : COPY requirements.txt .
+Step 4/17 : COPY requirements.txt .
  ---> Using cache
  ---> 7b535dd05d37
-Step 5/13 : RUN pip install --no-cache-dir -r requirements.txt
+Step 5/17 : RUN pip install --no-cache-dir -r requirements.txt
  ---> Using cache
  ---> d109237a42b6
-Step 6/13 : COPY app/ ./app/
- ---> 2703e75dbd0f
-Step 7/13 : COPY templates/ ./templates/
- ---> bac593c9705c
-Step 8/13 : RUN mkdir -p /app/output /app/data
- ---> Running in 55a1ef90c06a
- ---> Removed intermediate container 55a1ef90c06a
- ---> 2f20e4ec4643
-Step 9/13 : ENV AIRLOCK_OUTPUT_DIR=/app/output     AIRLOCK_DB_PATH=/app/data/registry.db     OPENSCAD_BIN=openscad
- ---> Running in 66bb68ae593b
- ---> Removed intermediate container 66bb68ae593b
- ---> 6383591b5f01
-Step 10/13 : EXPOSE 8000
- ---> Running in 943f3446ce5a
- ---> Removed intermediate container 943f3446ce5a
- ---> cb9153a19c2a
-Step 11/13 : HEALTHCHECK --interval=30s --timeout=5s --retries=3     CMD curl -fsS http://localhost:8000/healthz || exit 1
- ---> Running in 7cfb9bbf0bc4
- ---> Removed intermediate container 7cfb9bbf0bc4
- ---> f68ba91bada1
-Step 12/13 : CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
- ---> Running in b095a43c9e09
- ---> Removed intermediate container b095a43c9e09
- ---> a096c15f02b7
-Step 13/13 : LABEL com.docker.compose.image.builder=classic
- ---> Running in fdb9aea6a898
- ---> Removed intermediate container fdb9aea6a898
- ---> 09ea973ac0f9
-Successfully built 09ea973ac0f9
+Step 6/17 : COPY app/ ./app/
+ ---> d2a893991b2e
+Step 7/17 : COPY templates/ ./templates/
+ ---> 252d9c2c608b
+Step 8/17 : COPY VERSION ./VERSION
+ ---> d06e077792c6
+Step 9/17 : ARG GIT_SHA=unknown
+ ---> Running in 5c4a76e41f1c
+ ---> Removed intermediate container 5c4a76e41f1c
+ ---> bb2a58c891ea
+Step 10/17 : ARG BUILD_DATE=unknown
+ ---> Running in 10805ff1a0ca
+ ---> Removed intermediate container 10805ff1a0ca
+ ---> 3fc350f5f881
+Step 11/17 : ENV GIT_SHA=${GIT_SHA}     BUILD_DATE=${BUILD_DATE}
+ ---> Running in 41d36a4f2c1e
+ ---> Removed intermediate container 41d36a4f2c1e
+ ---> 02e6f873757b
+Step 12/17 : RUN mkdir -p /app/output /app/data /app/control
+ ---> Running in a5a6aba8e56a
+ ---> Removed intermediate container a5a6aba8e56a
+ ---> bdc32f6b8180
+Step 13/17 : ENV AIRLOCK_OUTPUT_DIR=/app/output     AIRLOCK_DB_PATH=/app/data/registry.db     AIRLOCK_CONTROL_DIR=/app/control     OPENSCAD_BIN=openscad
+ ---> Running in a70dcfe7198c
+ ---> Removed intermediate container a70dcfe7198c
+ ---> 05d9c6bcacbd
+Step 14/17 : EXPOSE 8000
+ ---> Running in 1c6676f0f6c1
+ ---> Removed intermediate container 1c6676f0f6c1
+ ---> 8dc0ef81abf6
+Step 15/17 : HEALTHCHECK --interval=30s --timeout=5s --retries=3     CMD curl -fsS http://localhost:8000/healthz || exit 1
+ ---> Running in 9deba8aaed82
+ ---> Removed intermediate container 9deba8aaed82
+ ---> f35380b3d7ad
+Step 16/17 : CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ ---> Running in 0df89f35104a
+ ---> Removed intermediate container 0df89f35104a
+ ---> aecdbc9e0187
+Step 17/17 : LABEL com.docker.compose.image.builder=classic
+ ---> Running in 23d18d276643
+ ---> Removed intermediate container 23d18d276643
+ ---> 6f47a8d8d544
+Successfully built 6f47a8d8d544
 Successfully tagged airlock-stl-generator:latest
  Image airlock-stl-generator:latest Built 
  Image airlock-stl-generator:latest Built 

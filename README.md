@@ -120,6 +120,28 @@ Die Vorlage wird vor dem Prägen um 180° um die Y-Achse in die Sample-Ausrichtu
 gebracht; der Code sitzt erhaben (0,585 mm) auf der Paddle-Fläche
 (`Liberation Sans Bold`, size 4.31, xscale 0.9573).
 
+## Version & Updates
+
+Die laufende Version (`VERSION`-Datei, ins Image gebacken) wird im Dashboard
+angezeigt (`/v1/version`). Ein Host-Update-Watcher (`scripts/nas_update_watcher.py`)
+prüft per `git fetch` den neuesten Release-Tag, schreibt `control/status.json`
+(Dashboard: „Version & Updates" mit Historie) und wendet auf Anforderung
+(`control/update.request`, ausgelöst über „Update anwenden") den neuesten Tag an
+(`git checkout` + Rebuild des Generator-Containers).
+
+Der Watcher läuft entweder als Host-Prozess (cron/systemd) **oder** als
+Updater-Sidecar-Container:
+
+```bash
+# UID/GID des NAS-Benutzers bzw. der docker-Gruppe in .env setzen:
+#   RUN_UID=$(id -u)   DOCKER_GID=$(getent group docker | cut -d: -f3)
+docker compose -f docker-compose.yml -f docker-compose.updater.yml up -d --build
+```
+
+Nur dieser Sidecar hat Zugriff auf den Docker-Socket; der Generator-Container
+selbst bleibt ohne Docker-/Root-Rechte. Releases werden per GitHub Actions bei
+einem Tag `v*` erstellt (`.github/workflows/ci.yml`).
+
 ## Integration mit KG-Tracker (separates Arbeitspaket)
 
 KG-Tracker ruft den Generator im internen Docker-Netz auf, persistiert die

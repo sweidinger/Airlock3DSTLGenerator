@@ -134,11 +134,15 @@ def test_batches_list():
     assert {"batch_id", "count", "status", "created_at"} <= set(rows[0])
 
 
+import pathlib as _pl
+_EXPECTED_VERSION = (_pl.Path(__file__).resolve().parent.parent / "VERSION").read_text().strip()
+
+
 def test_version():
     v = client.get("/v1/version", headers=AUTH)
     assert v.status_code == 200
     body = v.json()
-    assert body["version"] == "1.1.0"        # aus VERSION-Datei
+    assert body["version"] == _EXPECTED_VERSION   # aus VERSION-Datei
     assert "git_sha" in body and "build_date" in body
     assert client.get("/v1/version").status_code == 401
 
@@ -147,7 +151,7 @@ def test_update_status_and_apply():
     s = client.get("/v1/update/status", headers=AUTH)
     assert s.status_code == 200
     body = s.json()
-    assert body["current"] == "1.1.0"
+    assert body["current"] == _EXPECTED_VERSION
     assert body["update_available"] is False   # ohne status.json vom Watcher
     assert body["applying"] is False
     # Apply-Anforderung schreibt die Request-Datei

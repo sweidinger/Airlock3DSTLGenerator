@@ -1,0 +1,25 @@
+# Optionaler Updater-Sidecar (Overlay).
+# Start:  docker compose -f docker-compose.yml -f docker-compose.updater.yml up -d --build
+#
+# Dieser eine Container hat Zugriff auf den Docker-Socket (für Rebuilds) und das
+# Repo. Der Generator-Container bleibt davon unberührt und hat KEINEN Socket.
+# UID/GID passend zum NAS-Benutzer und zur docker-Gruppe (in .env setzen):
+#   RUN_UID=<id -u>, DOCKER_GID=<getent group docker | cut -d: -f3>
+services:
+  updater:
+    build: ./updater
+    image: airlock-updater:latest
+    restart: unless-stopped
+    user: "${RUN_UID:-0}:${DOCKER_GID:-999}"
+    environment:
+      - AIRLOCK_REPO=/repo
+      - AIRLOCK_COMPOSE_SERVICE=airlock-generator
+      - WATCH_INTERVAL=60
+      - HOME=/tmp
+      # git über HTTPS statt SSH (öffentliches Repo -> keine Schlüssel nötig)
+      - GIT_CONFIG_COUNT=1
+      - GIT_CONFIG_KEY_0=url.https://github.com/.insteadOf
+      - GIT_CONFIG_VALUE_0=git@github.com:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/repo

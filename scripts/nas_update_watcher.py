@@ -94,8 +94,11 @@ def apply_update(latest: str) -> None:
     env = os.environ.copy()
     env["GIT_SHA"] = git("rev-parse", "--short", "HEAD").stdout.strip() or "unknown"
     env["BUILD_DATE"] = now()
-    build = subprocess.run(["docker", "compose", "up", "-d", "--build"],
-                           cwd=REPO, capture_output=True, text=True, env=env)
+    # Nur den Generator-Service neu bauen (damit ein Updater-Sidecar sich nicht
+    # selbst neu startet). AIRLOCK_COMPOSE_SERVICE leer -> alle Services.
+    service = os.environ.get("AIRLOCK_COMPOSE_SERVICE", "").strip()
+    compose_cmd = ["docker", "compose", "up", "-d", "--build"] + ([service] if service else [])
+    build = subprocess.run(compose_cmd, cwd=REPO, capture_output=True, text=True, env=env)
     log.append(f"[{now()}] docker compose rc={build.returncode}")
     log.append(build.stdout[-3000:]); log.append(build.stderr[-3000:])
     newver = read_version()
