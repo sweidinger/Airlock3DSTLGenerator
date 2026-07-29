@@ -42,6 +42,22 @@ async function viewSTL(path, title){
   }catch(e){ toast('Viewer-Fehler: '+e.message,'err'); }
 }
 
+// ---- Mehrfarb-3MF (Bambu) ----
+async function threemfExport(body, btn){
+  if(btn) btn.disabled=true;
+  toast('3MF wird erstellt…');
+  try{
+    const j = await api('/v1/airlocks:threemf',{method:'POST',body});
+    download(j.download_url, 'airlocks_'+j.count+'.3mf');
+    const grid = `Raster ${j.cols}×${j.rows}`;
+    if(!j.fits_on_plate) toast(`3MF: ${j.count} Airlock(s), ${grid} — passt NICHT auf eine ${j.plate}-mm-Platte!`,'err');
+    else toast(`3MF: ${j.count} Airlock(s), ${grid} · Download gestartet`,'ok');
+  }catch(e){ toast('3MF-Fehler: '+e.message,'err'); }
+  finally{ if(btn) btn.disabled=false; }
+}
+function selectedCodes(){ return Array.from(document.querySelectorAll('.tmfChk:checked')).map(c=>c.dataset.code); }
+function updateTmfSel(){ const n=selectedCodes().length; $('#tmfSelCount').textContent = n?(n+' markiert'):''; }
+
 function pill(status){
   const c = STATUS_COLORS[status]||'var(--muted)';
   return `<span class="pill" style="background:${c}">${status}</span>`;
@@ -99,6 +115,7 @@ async function refreshAirlocks(){
       const sel = `<select data-code="${r.code}" class="statusSel">`+
         STATUSES.map(s=>`<option ${s===r.status?'selected':''}>${s}</option>`).join('')+`</select>`;
       return `<tr>
+        <td><input type="checkbox" class="tmfChk" data-code="${r.code}"></td>
         <td class="mono"><b>${r.code}</b></td>
         <td>${sel}</td>
         <td class="muted">${r.source||''}</td>
@@ -108,9 +125,12 @@ async function refreshAirlocks(){
           <button class="secondary view" data-path="/v1/airlocks/${r.code}/stl" data-title="${r.code}">3D</button>
           <button class="secondary dl" data-path="/v1/airlocks/${r.code}/stl" data-file="${r.template||'lock'}_${r.code}.stl">STL</button>
         </td>
-      </tr>`;}).join('') : `<tr><td colspan="6" class="muted">keine Einträge</td></tr>`;
+      </tr>`;}).join('') : `<tr><td colspan="7" class="muted">keine Einträge</td></tr>`;
     bindRowActions();
-  }catch(e){ $('#airlockRows').innerHTML=`<tr><td colspan="6" class="err">${e.message}</td></tr>`; }
+    if($('#tmfAll')) $('#tmfAll').checked=false;
+    document.querySelectorAll('.tmfChk').forEach(c=>c.onchange=updateTmfSel);
+    updateTmfSel();
+  }catch(e){ $('#airlockRows').innerHTML=`<tr><td colspan="7" class="err">${e.message}</td></tr>`; }
 }
 
 async function refreshBatches(){
@@ -119,7 +139,10 @@ async function refreshBatches(){
     $('#batchRows').innerHTML = rows.length ? rows.map(r=>`<tr>
       <td class="mono">${r.batch_id}</td><td>${r.count}</td><td>${pill(r.status)}</td>
       <td class="muted">${r.requested_by||''}</td><td class="muted">${fmtDate(r.created_at)}</td>
-      <td>${r.zip_url?`<button class="secondary dl" data-path="${r.zip_url}" data-file="${r.batch_id}.zip">ZIP</button>`:'—'}</td>
+      <td class="row" style="gap:6px">
+        ${r.zip_url?`<button class="secondary dl" data-path="${r.zip_url}" data-file="${r.batch_id}.zip">ZIP</button>`:''}
+        <button class="secondary tmf" data-batch="${r.batch_id}" title="Mehrfarb-3MF (Bambu) für diesen Batch">3MF</button>
+      </td>
     </tr>`).join('') : `<tr><td colspan="6" class="muted">keine Batches</td></tr>`;
     bindRowActions();
   }catch(e){ $('#batchRows').innerHTML=`<tr><td colspan="6" class="err">${e.message}</td></tr>`; }
@@ -128,6 +151,7 @@ async function refreshBatches(){
 function bindRowActions(){
   document.querySelectorAll('.dl').forEach(b=>b.onclick=()=>download(b.dataset.path,b.dataset.file));
   document.querySelectorAll('.view').forEach(b=>b.onclick=()=>viewSTL(b.dataset.path,b.dataset.title));
+  document.querySelectorAll('.tmf').forEach(b=>b.onclick=()=>threemfExport({batch_id:b.dataset.batch}, b));
   document.querySelectorAll('.statusSel').forEach(sel=>sel.onchange=async()=>{
     try{ await api('/v1/airlocks/'+sel.dataset.code,{method:'PATCH',body:{status:sel.value}});
       toast('Status → '+sel.value,'ok'); refreshStats(); }
@@ -146,7 +170,8 @@ async function generate(){
     const links = r.airlocks.map(a=>`<span class="row" style="gap:4px;display:inline-flex;margin:0 4px 4px 0">`+
       `<button class="secondary dl" data-path="/v1/airlocks/${a.code}/stl" data-file="${a.code}.stl">${a.code}</button>`+
       `<button class="secondary view" data-path="/v1/airlocks/${a.code}/stl" data-title="${a.code}">3D</button></span>`).join(' ');
-    const zip = r.zip_url?` &nbsp;·&nbsp; <button class="dl" data-path="${r.zip_url}" data-file="${r.batch_id}.zip">ZIP</button>`:'';
+    const zip = (r.zip_url?` &nbsp;·&nbsp; <button class="dl" data-path="${r.zip_url}" data-file="${r.batch_id}.zip">ZIP</button>`:'')
+      + ` <button class="secondary tmf" data-batch="${r.batch_id}">3MF (Mehrfarbe)</button>`;
     const conf = (r.conflicts&&r.conflicts.length)?`<div class="err" style="margin-top:6px">Konflikte: ${r.conflicts.join(', ')}</div>`:'';
     $('#genResult').innerHTML=`<div>Batch <span class="mono">${r.batch_id}</span> — ${pill(r.status)} — ${r.count} Airlock(s):</div>
       <div class="row" style="margin-top:8px">${links}${zip}</div>${conf}`;
@@ -240,6 +265,11 @@ $('#connectBtn').onclick = connect;
 $('#genBtn').onclick = generate;
 $('#reloadAirlocks').onclick = refreshAirlocks;
 $('#reloadBatches').onclick = refreshBatches;
+$('#tmfSelBtn').onclick = ()=>{ const codes=selectedCodes();
+  if(!codes.length){ toast('Keine Airlocks markiert','err'); return; }
+  threemfExport({codes}, $('#tmfSelBtn')); };
+$('#tmfAll').onclick = ()=>{ const on=$('#tmfAll').checked;
+  document.querySelectorAll('.tmfChk').forEach(c=>c.checked=on); updateTmfSel(); };
 $('#reloadUpdates').onclick = refreshUpdates;
 $('#applyUpdateBtn').onclick = applyUpdate;
 $('#navDashboard').onclick = ()=>showView('dashboard');

@@ -1,6 +1,8 @@
 """Orchestrierung eines Batch-Auftrags: Vergabe -> Rendern -> ZIP."""
 from __future__ import annotations
 
+import shutil
+import tempfile
 import uuid
 import zipfile
 from pathlib import Path
@@ -8,6 +10,7 @@ from pathlib import Path
 from .config import settings
 from .generator import Generator, validate_code
 from .registry import Registry
+from .threemf import Airlock3MFItem, build_3mf
 
 
 class AirlockService:
@@ -59,6 +62,72 @@ class AirlockService:
         view["conflicts"] = conflicts
         view["status"] = batch_status
         return view
+
+    def build_threemf(self, *, codes: list[str] | None = None, batch_id: str | None = None,
+                      requested_by: str = "dashboard",
+                      plate: float | None = None, margin: float | None = None,
+                      gap: float | None = None) -> dict:
+        """Erzeugt eine Mehrfarb-3MF (Body schwarz, Code weiß) im Raster.
+
+        Codes kommen entweder direkt oder aus einem Batch. Body- und Code-Teil
+        werden je Code frisch gerendert (deterministisch) und in eine 3MF gepackt.
+        """
+        if batch_id:
+            rows = self.registry.airlocks_of_batch(batch_id)
+            code_list = [r["code"] for r in rows]
+            if not code_list:
+                raise ValueError(f"Batch {batch_id} enthält keine Airlocks.")
+        elif codes:
+            # Reihenfolge erhalten, Duplikate entfernen
+            seen: set[str] = set()
+            code_list = []
+            for c in codes:
+                cc = validate_code(c, self.cfg.code_length)
+                if cc not in seen:
+                    seen.add(cc)
+                    code_list.append(cc)
+        else:
+            raise ValueError("codes oder batch_id angeben.")
+
+        tmpdir = Path(tempfile.mkdtemp(prefix="airlock3mf_"))
+        try:
+            items: list[Airlock3MFItem] = []
+            for c in code_list:
+                bp = tmpdir / f"{c}_body.stl"
+                cp = tmpdir / f"{c}_code.stl"
+                self.generator.render(c, bp, part="body")
+                self.generator.render(c, cp, part="code")
+                items.append(Airlock3MFItem(c, bp, cp))
+
+            out_dir = Path(self.cfg.output_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            token = "tmf_" + uuid.uuid4().hex[:12]
+            out_path = out_dir / f"{token}.3mf"
+            res = build_3mf(
+                items, out_path,
+                plate=plate if plate is not None else self.cfg.threemf_plate,
+                margin=margin if margin is not None else self.cfg.threemf_margin,
+                gap=gap if gap is not None else self.cfg.threemf_gap,
+                color_body=self.cfg.threemf_color_body,
+                color_code=self.cfg.threemf_color_code,
+            )
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+        return {
+            "file": out_path.name,
+            "download_url": f"/v1/threemf/{out_path.name}",
+            "count": res.count,
+            "codes": code_list,
+            "cols": res.cols,
+            "rows": res.rows,
+            "plate": res.plate,
+            "fits_on_plate": res.fits_on_plate,
+            "item_size_mm": [round(res.item_w, 2), round(res.item_h, 2)],
+            "colors": {"lock": self.cfg.threemf_color_body, "code": self.cfg.threemf_color_code},
+            "sha256": res.sha256,
+            "bytes": res.bytes,
+        }
 
     def _make_zip(self, batch_id: str, paths: list[Path]) -> Path:
         out_dir = Path(self.cfg.output_dir)

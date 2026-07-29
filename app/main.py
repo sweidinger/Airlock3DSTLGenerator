@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from .auth import require_api_key
 from .config import settings
 from .generator import validate_code
-from .models import AirlockOut, BatchOut, GenerateRequest, StatusUpdate
+from .models import AirlockOut, BatchOut, GenerateRequest, StatusUpdate, ThreeMFRequest
 from .registry import STATUSES, CodeExhaustionError
 from .service import AirlockService
 from .updates import read_status, request_update
@@ -140,6 +140,31 @@ def update_status(code: str, upd: StatusUpdate, svc: AirlockService = Depends(ge
     except ValueError as e:
         raise HTTPException(422, str(e))
     return _airlock_row_to_out(r)
+
+
+# ---- Mehrfarb-3MF (Bambu) --------------------------------------------
+@app.post("/v1/airlocks:threemf", dependencies=[Depends(require_api_key)], tags=["airlocks"])
+def build_threemf(req: ThreeMFRequest, svc: AirlockService = Depends(get_service)):
+    if req.codes and len(req.codes) > settings.max_batch:
+        raise HTTPException(400, f"Zu viele Codes (max {settings.max_batch}).")
+    try:
+        return svc.build_threemf(
+            codes=req.codes, batch_id=req.batch_id,
+            plate=req.plate, margin=req.margin, gap=req.gap,
+        )
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@app.get("/v1/threemf/{name}", dependencies=[Depends(require_api_key)], tags=["airlocks"])
+def download_threemf(name: str):
+    import re as _re
+    if not _re.fullmatch(r"tmf_[0-9a-f]{6,}\.3mf", name):
+        raise HTTPException(400, "Ungültiger 3MF-Name.")
+    p = Path(settings.output_dir) / name
+    if not p.is_file():
+        raise HTTPException(404, "3MF nicht gefunden.")
+    return FileResponse(p, media_type="model/3mf", filename=name)
 
 
 # ---- Batches ----------------------------------------------------------

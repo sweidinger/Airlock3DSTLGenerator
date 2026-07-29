@@ -71,12 +71,15 @@
         <h2 style="margin:0">Airlocks</h2>
         <select id="filterStatus" class="secondary"><option value="">alle Status</option></select>
         <button class="secondary" id="reloadAirlocks">Aktualisieren</button>
-        <small class="hint" id="airlockCount"></small>
+        <button class="secondary" id="tmfSelBtn" title="Mehrfarb-3MF (Bambu) aus den markierten Airlocks erstellen">3MF aus Auswahl</button>
+        <small class="hint" id="tmfSelCount"></small>
+        <small class="hint" id="airlockCount" style="margin-left:auto"></small>
       </div>
       <div class="tablewrap">
         <table><thead><tr>
+          <th style="width:30px"><input type="checkbox" id="tmfAll" title="Alle markieren"></th>
           <th>Code</th><th>Status</th><th>Quelle</th><th>Batch</th><th>Erstellt</th><th>STL</th>
-        </tr></thead><tbody id="airlockRows"><tr><td colspan="6" class="muted">— nicht verbunden —</td></tr></tbody></table>
+        </tr></thead><tbody id="airlockRows"><tr><td colspan="7" class="muted">— nicht verbunden —</td></tr></tbody></table>
       </div>
     </section>
 
@@ -87,7 +90,7 @@
       </div>
       <div class="tablewrap">
         <table><thead><tr>
-          <th>Batch-ID</th><th>Anzahl</th><th>Status</th><th>Angefordert von</th><th>Erstellt</th><th>ZIP</th>
+          <th>Batch-ID</th><th>Anzahl</th><th>Status</th><th>Angefordert von</th><th>Erstellt</th><th>Export</th>
         </tr></thead><tbody id="batchRows"><tr><td colspan="6" class="muted">— nicht verbunden —</td></tr></tbody></table>
       </div>
     </section>

@@ -162,6 +162,45 @@ def test_update_status_and_apply():
     assert client.get("/v1/update/status").status_code == 401
 
 
+def test_threemf_export():
+    import io
+    import zipfile
+
+    # Batch anlegen, dann Mehrfarb-3MF daraus bauen
+    b = client.post("/v1/airlocks:generate", json={"count": 3}, headers=AUTH).json()
+    r = client.post("/v1/airlocks:threemf", json={"batch_id": b["batch_id"]}, headers=AUTH)
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["count"] == 3
+    assert j["cols"] >= 1 and j["rows"] >= 1
+    assert j["fits_on_plate"] is True
+    assert j["file"].startswith("tmf_") and j["file"].endswith(".3mf")
+
+    # Download + Struktur der 3MF prüfen
+    d = client.get(j["download_url"], headers=AUTH)
+    assert d.status_code == 200
+    assert d.headers["content-type"] == "model/3mf"
+    zf = zipfile.ZipFile(io.BytesIO(d.content))
+    names = zf.namelist()
+    assert "3D/3dmodel.model" in names and "[Content_Types].xml" in names
+    model = zf.read("3D/3dmodel.model").decode()
+    assert model.count("<base ") == 2          # zwei Farben (Lock/Code)
+    assert model.count("<item ") == 3          # ein Bau-Item je Airlock
+
+    # Direkte Code-Vorgabe inkl. Dedup
+    r2 = client.post("/v1/airlocks:threemf",
+                     json={"codes": ["73412", "73412", "42"]}, headers=AUTH)
+    assert r2.status_code == 200
+    assert r2.json()["count"] == 2
+    assert r2.json()["codes"] == ["73412", "00042"]
+
+    # Auth + Validierung
+    assert client.post("/v1/airlocks:threemf", json={"batch_id": b["batch_id"]}).status_code == 401
+    assert client.post("/v1/airlocks:threemf", json={}, headers=AUTH).status_code == 422
+    assert client.get("/v1/threemf/tmf_deadbeefcafe.3mf", headers=AUTH).status_code == 404
+    assert client.get("/v1/threemf/not-a-token.3mf", headers=AUTH).status_code == 400
+
+
 def test_config_masks_key():
     c = client.get("/v1/config", headers=AUTH)
     assert c.status_code == 200
