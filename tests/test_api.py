@@ -95,6 +95,16 @@ def test_dashboard_served():
     assert "Airlock-STL-Generator" in r.text
 
 
+def test_viewer_assets_and_markup():
+    # three.js-Vendor wird unter /static ausgeliefert
+    r = client.get("/static/vendor/STLLoader.js")
+    assert r.status_code == 200
+    # Dashboard enthält Viewer-Modal und Logik
+    html = client.get("/").text
+    assert "viewerModal" in html
+    assert "openSTLViewer" in html
+
+
 def test_dashboard_no_key_leak_by_default():
     # Ohne AIRLOCK_UI_AUTOKEY darf der Key-WERT NICHT im Seitenquelltext stehen.
     r = client.get("/")

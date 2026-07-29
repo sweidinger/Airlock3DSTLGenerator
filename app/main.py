@@ -5,7 +5,8 @@ import json
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 from .auth import require_api_key
 from .config import settings
@@ -21,6 +22,10 @@ app = FastAPI(
 )
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+# Statische Assets (three.js-Vendor, Viewer) unter /static ausliefern.
+if _STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 _service: AirlockService | None = None
 
@@ -48,6 +53,11 @@ def dashboard():
 
 
 # ---- Health (ohne Auth) ----------------------------------------------
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return Response(status_code=204)
+
+
 @app.get("/healthz", tags=["health"])
 def healthz():
     return {"status": "ok"}

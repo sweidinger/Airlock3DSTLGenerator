@@ -59,6 +59,15 @@
   .toast.show{opacity:1;transform:none}
   .toast.err{border-color:var(--err)} .toast.ok{border-color:var(--ok)}
   small.hint{color:var(--muted)}
+  .modal{position:fixed;inset:0;background:rgba(4,8,14,.74);display:none;
+    align-items:center;justify-content:center;z-index:60}
+  .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    width:min(940px,94vw);height:min(700px,88vh);display:flex;flex-direction:column;overflow:hidden}
+  .modal .bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+  .modal .bar h3{margin:0;font-size:14px;font-family:ui-monospace,Menlo,monospace}
+  #viewerCanvas{flex:1;width:100%;display:block;
+    background:radial-gradient(circle at 50% 38%, #1b2636, #0b111b)}
+  .modal .hint{padding:8px 14px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
 </style>
 </head>
 <body>
@@ -142,6 +151,73 @@
 
 <div class="toast" id="toast"></div>
 
+<div class="modal" id="viewerModal">
+  <div class="box">
+    <div class="bar">
+      <h3 id="viewerTitle">STL</h3>
+      <button class="secondary" style="margin-left:auto" onclick="closeSTLViewer()">Schließen</button>
+    </div>
+    <canvas id="viewerCanvas"></canvas>
+    <div class="hint">Ziehen = drehen · Scrollen = zoomen · Rechtsklick-Ziehen = verschieben</div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "/static/vendor/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { STLLoader } from '/static/vendor/STLLoader.js';
+import { OrbitControls } from '/static/vendor/OrbitControls.js';
+
+let renderer, scene, camera, controls, mesh, inited=false;
+function initViewer(){
+  const canvas = document.getElementById('viewerCanvas');
+  renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 8000);
+  camera.up.set(0,0,1);                       // STL ist Z-oben
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.dampingFactor = 0.09;
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  const d1 = new THREE.DirectionalLight(0xffffff, 0.95); d1.position.set(1, -1.4, 2.2); scene.add(d1);
+  const d2 = new THREE.DirectionalLight(0xffffff, 0.45); d2.position.set(-1.2, 0.8, -1); scene.add(d2);
+  inited = true;
+  (function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+}
+function resize(){
+  const c = document.getElementById('viewerCanvas');
+  const w = c.clientWidth||800, h = c.clientHeight||500;
+  renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix();
+}
+window.openSTLViewer = function(arrayBuffer, title){
+  const modal = document.getElementById('viewerModal');
+  document.getElementById('viewerTitle').textContent = title || 'STL';
+  modal.style.display = 'flex';
+  if(!inited) initViewer();
+  resize();
+  if(mesh){ scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); mesh=null; }
+  const geo = new STLLoader().parse(arrayBuffer);
+  geo.computeVertexNormals(); geo.center();
+  const mat = new THREE.MeshPhongMaterial({color:0x9aa7b8, specular:0x2a3340, shininess:22});
+  mesh = new THREE.Mesh(geo, mat); scene.add(mesh);
+  geo.computeBoundingSphere();
+  const r = geo.boundingSphere.radius || 30;
+  camera.position.set(r*0.35, -r*1.9, r*1.15);
+  camera.near = r/100; camera.far = r*40; camera.updateProjectionMatrix();
+  controls.target.set(0,0,0); controls.update();
+  resize();
+};
+window.closeSTLViewer = function(){ document.getElementById('viewerModal').style.display = 'none'; };
+window.addEventListener('resize', ()=>{
+  if(inited && document.getElementById('viewerModal').style.display !== 'none') resize();
+});
+document.getElementById('viewerModal').addEventListener('click', e=>{
+  if(e.target.id === 'viewerModal') window.closeSTLViewer();   // Klick auf Hintergrund schließt
+});
+</script>
+
 <script>
 const STATUS_COLORS = {
   reserved:'var(--reserved)', generated:'var(--generated)', printed:'var(--printed)',
@@ -175,6 +251,16 @@ async function download(path, filename){
     const a = document.createElement('a'); a.href=url; a.download=filename; a.click();
     setTimeout(()=>URL.revokeObjectURL(url), 4000);
   }catch(e){ toast('Download fehlgeschlagen: '+e.message,'err'); }
+}
+
+async function viewSTL(path, title){
+  if(!window.openSTLViewer){ toast('Viewer nicht geladen','err'); return; }
+  try{
+    const res = await fetch(BASE+path,{headers:{'X-API-Key':KEY}});
+    if(!res.ok) throw new Error(res.status);
+    const buf = await res.arrayBuffer();
+    window.openSTLViewer(buf, title);
+  }catch(e){ toast('Viewer-Fehler: '+e.message,'err'); }
 }
 
 function pill(status){
@@ -229,7 +315,10 @@ async function refreshAirlocks(){
         <td class="muted">${r.source||''}</td>
         <td class="mono muted">${r.batch_id||''}</td>
         <td class="muted">${fmtDate(r.created_at)}</td>
-        <td><button class="secondary dl" data-path="/v1/airlocks/${r.code}/stl" data-file="${r.template||'lock'}_${r.code}.stl">STL</button></td>
+        <td class="row" style="gap:6px">
+          <button class="secondary view" data-path="/v1/airlocks/${r.code}/stl" data-title="${r.code}">3D</button>
+          <button class="secondary dl" data-path="/v1/airlocks/${r.code}/stl" data-file="${r.template||'lock'}_${r.code}.stl">STL</button>
+        </td>
       </tr>`;}).join('') : `<tr><td colspan="6" class="muted">keine Einträge</td></tr>`;
     bindRowActions();
   }catch(e){ $('#airlockRows').innerHTML=`<tr><td colspan="6" class="err">${e.message}</td></tr>`; }
@@ -249,6 +338,7 @@ async function refreshBatches(){
 
 function bindRowActions(){
   document.querySelectorAll('.dl').forEach(b=>b.onclick=()=>download(b.dataset.path,b.dataset.file));
+  document.querySelectorAll('.view').forEach(b=>b.onclick=()=>viewSTL(b.dataset.path,b.dataset.title));
   document.querySelectorAll('.statusSel').forEach(sel=>sel.onchange=async()=>{
     try{ await api('/v1/airlocks/'+sel.dataset.code,{method:'PATCH',body:{status:sel.value}});
       toast('Status → '+sel.value,'ok'); refreshStats(); }
@@ -264,7 +354,9 @@ async function generate(){
   $('#genBtn').disabled=true; $('#genHint').textContent='läuft…';
   try{
     const r = await api('/v1/airlocks:generate',{method:'POST',body});
-    const links = r.airlocks.map(a=>`<button class="secondary dl" data-path="/v1/airlocks/${a.code}/stl" data-file="${a.code}.stl">${a.code}</button>`).join(' ');
+    const links = r.airlocks.map(a=>`<span class="row" style="gap:4px;display:inline-flex;margin:0 4px 4px 0">`+
+      `<button class="secondary dl" data-path="/v1/airlocks/${a.code}/stl" data-file="${a.code}.stl">${a.code}</button>`+
+      `<button class="secondary view" data-path="/v1/airlocks/${a.code}/stl" data-title="${a.code}">3D</button></span>`).join(' ');
     const zip = r.zip_url?` &nbsp;·&nbsp; <button class="dl" data-path="${r.zip_url}" data-file="${r.batch_id}.zip">ZIP</button>`:'';
     const conf = (r.conflicts&&r.conflicts.length)?`<div class="err" style="margin-top:6px">Konflikte: ${r.conflicts.join(', ')}</div>`:'';
     $('#genResult').innerHTML=`<div>Batch <span class="mono">${r.batch_id}</span> — ${pill(r.status)} — ${r.count} Airlock(s):</div>
