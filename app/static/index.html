@@ -75,6 +75,7 @@
   <span class="dot" id="healthDot"></span>
   <h1>Airlock-STL-Generator</h1>
   <span class="muted" id="tplName">—</span>
+  <span class="mono" id="versionBadge" style="font-size:12px;color:var(--accent)"></span>
   <div class="conn" id="connControls">
     <input id="baseUrl" style="width:180px" placeholder="Basis-URL (leer = hier)">
     <input id="apiKey" type="password" style="width:190px" placeholder="API-Key (X-API-Key)">
@@ -121,6 +122,29 @@
       <div class="kv" id="configBox"><span class="muted">— nicht verbunden —</span></div>
     </section>
   </div>
+
+  <section class="card" id="updateCard">
+    <div class="row" style="margin-bottom:12px">
+      <h2 style="margin:0">Version &amp; Updates</h2>
+      <button class="secondary" id="reloadUpdates">Prüfen</button>
+      <small class="hint" id="updateChecked"></small>
+    </div>
+    <div class="row" style="gap:22px;align-items:flex-start">
+      <div class="kv" style="min-width:230px">
+        <span class="kk">Aktuell</span><span class="mono" id="uCurrent">—</span>
+        <span class="kk">Neueste</span><span class="mono" id="uLatest">—</span>
+        <span class="kk">Status</span><span id="uState">—</span>
+      </div>
+      <div style="flex:1;min-width:240px">
+        <div class="muted" style="margin-bottom:6px;font-size:12px">VERSIONSHISTORIE</div>
+        <div id="uHistory" style="font-size:12px"></div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button id="applyUpdateBtn" disabled>Update anwenden</button>
+      <small class="hint" id="uApplyHint"></small>
+    </div>
+  </section>
 
   <section class="card">
     <div class="row" style="margin-bottom:12px">
@@ -368,13 +392,50 @@ async function generate(){
   finally{ $('#genBtn').disabled=false; $('#genHint').textContent=''; }
 }
 
+async function refreshVersion(){
+  try{
+    const v = await api('/v1/version');
+    $('#versionBadge').textContent = 'v'+v.version + (v.git_sha && v.git_sha!=='unknown' ? (' · '+v.git_sha) : '');
+  }catch(e){ $('#versionBadge').textContent=''; }
+}
+
+async function refreshUpdates(){
+  try{
+    const u = await api('/v1/update/status');
+    $('#uCurrent').textContent = 'v'+(u.current||'?');
+    $('#uLatest').textContent  = u.latest ? ('v'+u.latest) : '—';
+    $('#updateChecked').textContent = u.checked_at ? ('geprüft '+fmtDate(u.checked_at))
+      : (u.watcher_active ? '' : 'Watcher noch nicht aktiv');
+    let s;
+    if(u.applying) s='<span class="pill" style="background:var(--warn)">Update läuft…</span>';
+    else if(u.requested) s='<span class="pill" style="background:var(--warn)">angefordert…</span>';
+    else if(u.update_available) s='<span class="pill" style="background:var(--generated)">Update verfügbar</span>';
+    else s='<span class="pill" style="background:var(--active)">aktuell</span>';
+    if(u.last_result) s += ` <small class="hint">zuletzt: v${u.last_result.version} ${u.last_result.ok?'✓':'✗'}</small>`;
+    $('#uState').innerHTML = s;
+    $('#applyUpdateBtn').disabled = !u.update_available || u.applying || u.requested;
+    $('#uHistory').innerHTML = (u.history && u.history.length)
+      ? u.history.map(h=>`<div><span class="mono">v${h.version}</span> <span class="muted">· ${h.date}</span> ${h.subject?('· '+h.subject):''}</div>`).join('')
+      : '<span class="muted">keine Releases</span>';
+    if((u.applying||u.requested) && !window._updPoll) window._updPoll=setInterval(refreshUpdates,5000);
+    if(!(u.applying||u.requested) && window._updPoll){ clearInterval(window._updPoll); window._updPoll=null; refreshVersion(); }
+  }catch(e){ $('#uState').innerHTML=`<span class="err">${e.message}</span>`; }
+}
+
+async function applyUpdate(){
+  if(!confirm('Update jetzt anwenden? Der Dienst wird neu gebaut und ist dabei kurz nicht erreichbar.')) return;
+  $('#applyUpdateBtn').disabled=true; $('#uApplyHint').textContent='angefordert…';
+  try{ await api('/v1/update/apply',{method:'POST'}); toast('Update angefordert','ok'); refreshUpdates(); }
+  catch(e){ toast('Fehler: '+e.message,'err'); $('#applyUpdateBtn').disabled=false; $('#uApplyHint').textContent=''; }
+}
+
 async function connect(){
   BASE = $('#baseUrl').value.trim().replace(/\/$/,'');
   KEY = $('#apiKey').value.trim();
   localStorage.setItem('airlock_base', BASE); localStorage.setItem('airlock_key', KEY);
   try{
     await refreshStats();
-    await Promise.all([refreshConfig(), refreshAirlocks(), refreshBatches()]);
+    await Promise.all([refreshConfig(), refreshAirlocks(), refreshBatches(), refreshVersion(), refreshUpdates()]);
     toast('Verbunden','ok');
   }catch(e){ toast('Verbindung/Key fehlgeschlagen: '+e.message,'err'); }
 }
@@ -389,6 +450,8 @@ $('#connectBtn').onclick = connect;
 $('#genBtn').onclick = generate;
 $('#reloadAirlocks').onclick = refreshAirlocks;
 $('#reloadBatches').onclick = refreshBatches;
+$('#reloadUpdates').onclick = refreshUpdates;
+$('#applyUpdateBtn').onclick = applyUpdate;
 $('#filterStatus').onchange = refreshAirlocks;
 $('#apiKey').addEventListener('keydown',e=>{if(e.key==='Enter')connect();});
 $('#baseUrl').value = localStorage.getItem('airlock_base')||'';

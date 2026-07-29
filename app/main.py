@@ -14,6 +14,8 @@ from .generator import validate_code
 from .models import AirlockOut, BatchOut, GenerateRequest, StatusUpdate
 from .registry import STATUSES, CodeExhaustionError
 from .service import AirlockService
+from .updates import read_status, request_update
+from .version import APP_VERSION, BUILD_DATE, GIT_SHA
 
 app = FastAPI(
     title="Airlock-STL-Generator",
@@ -218,6 +220,25 @@ def config():
             "expected_bounds_max": list(p.expected_bounds_max),
         },
     }
+
+
+# ---- Version & Update ------------------------------------------------
+@app.get("/v1/version", dependencies=[Depends(require_api_key)], tags=["version"])
+def version():
+    return {"version": APP_VERSION, "git_sha": GIT_SHA, "build_date": BUILD_DATE}
+
+
+@app.get("/v1/update/status", dependencies=[Depends(require_api_key)], tags=["version"])
+def update_status():
+    return read_status()
+
+
+@app.post("/v1/update/apply", dependencies=[Depends(require_api_key)], tags=["version"])
+def update_apply():
+    res = request_update()
+    if not res.get("requested"):
+        raise HTTPException(409, res.get("reason", "Update konnte nicht angefordert werden."))
+    return res
 
 
 # ---- Helpers ----------------------------------------------------------

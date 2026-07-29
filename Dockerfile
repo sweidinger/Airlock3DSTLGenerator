@@ -15,11 +15,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
 COPY templates/ ./templates/
+COPY VERSION ./VERSION
+
+# Build-Metadaten (vom Watcher/CI gesetzt)
+ARG GIT_SHA=unknown
+ARG BUILD_DATE=unknown
+ENV GIT_SHA=${GIT_SHA} \
+    BUILD_DATE=${BUILD_DATE}
 
 # Laufzeit-Verzeichnisse (werden i. d. R. als Volumes gemountet)
-RUN mkdir -p /app/output /app/data
+RUN mkdir -p /app/output /app/data /app/control
 ENV AIRLOCK_OUTPUT_DIR=/app/output \
     AIRLOCK_DB_PATH=/app/data/registry.db \
+    AIRLOCK_CONTROL_DIR=/app/control \
     OPENSCAD_BIN=openscad
 
 EXPOSE 8000

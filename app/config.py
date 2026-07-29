@@ -50,6 +50,8 @@ class Settings:
     api_key: str = os.environ.get("AIRLOCK_API_KEY", "change-me-in-production")
     db_path: Path = _env_path("AIRLOCK_DB_PATH", str(BASE_DIR / "data" / "registry.db"))
     output_dir: Path = _env_path("AIRLOCK_OUTPUT_DIR", str(BASE_DIR / "output"))
+    # Geteiltes Verzeichnis mit dem Host-Update-Watcher (status.json / update.request).
+    control_dir: Path = _env_path("AIRLOCK_CONTROL_DIR", str(BASE_DIR / "control"))
     max_batch: int = int(os.environ.get("AIRLOCK_MAX_BATCH", "200"))
     code_length: int = int(os.environ.get("AIRLOCK_CODE_LENGTH", "5"))
     openscad_bin: str = os.environ.get("OPENSCAD_BIN", "openscad")

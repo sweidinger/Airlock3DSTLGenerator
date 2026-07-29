@@ -6,10 +6,8 @@ venv/
 data/
 output/*
 !output/.gitkeep
+control/
 *.db
 *.db-wal
 *.db-shm
 .env
-build.log
-docker-compose.override.yml
-redeploy.log

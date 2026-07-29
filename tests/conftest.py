@@ -7,6 +7,7 @@ _tmp = tempfile.mkdtemp(prefix="airlock-test-")
 os.environ["AIRLOCK_API_KEY"] = "test-key"
 os.environ["AIRLOCK_DB_PATH"] = str(pathlib.Path(_tmp) / "registry.db")
 os.environ["AIRLOCK_OUTPUT_DIR"] = str(pathlib.Path(_tmp) / "output")
+os.environ["AIRLOCK_CONTROL_DIR"] = str(pathlib.Path(_tmp) / "control")
 os.environ["AIRLOCK_MAX_BATCH"] = "50"
 
 TESTS_DIR = pathlib.Path(__file__).resolve().parent
