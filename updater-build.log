@@ -1,0 +1,78 @@
+time="2026-07-29T23:36:23+02:00" level=warning msg="Docker Compose requires buildx plugin to be installed"
+ Image airlock-updater:latest Building 
+ Image airlock-updater:latest Building 
+Sending build context to Docker daemon     615B
+Step 1/8 : FROM alpine:3.20
+ ---> bf8527eb54c3
+Step 2/8 : RUN apk add --no-cache docker-cli docker-cli-compose git python3
+ ---> Running in eb080e00a2d8
+fetch https://dl-cdn.alpinelinux.org/alpine/v3.20/main/x86_64/APKINDEX.tar.gz
+fetch https://dl-cdn.alpinelinux.org/alpine/v3.20/community/x86_64/APKINDEX.tar.gz
+(1/31) Installing ca-certificates (20260413-r0)
+(2/31) Installing docker-cli (26.1.5-r0)
+(3/31) Installing docker-cli-compose (2.27.0-r3)
+(4/31) Installing brotli-libs (1.1.0-r2)
+(5/31) Installing c-ares (1.33.1-r0)
+(6/31) Installing libunistring (1.2-r0)
+(7/31) Installing libidn2 (2.3.7-r0)
+(8/31) Installing nghttp2-libs (1.62.1-r0)
+(9/31) Installing libpsl (0.21.5-r1)
+(10/31) Installing zstd-libs (1.5.6-r0)
+(11/31) Installing libcurl (8.14.1-r2)
+(12/31) Installing libexpat (2.8.1-r0)
+(13/31) Installing pcre2 (10.43-r0)
+(14/31) Installing git (2.45.4-r0)
+(15/31) Installing git-init-template (2.45.4-r0)
+(16/31) Installing libbz2 (1.0.8-r6)
+(17/31) Installing libffi (3.4.6-r0)
+(18/31) Installing gdbm (1.23-r1)
+(19/31) Installing xz-libs (5.8.3-r0)
+(20/31) Installing libgcc (13.2.1_git20240309-r1)
+(21/31) Installing libstdc++ (13.2.1_git20240309-r1)
+(22/31) Installing mpdecimal (4.0.0-r0)
+(23/31) Installing ncurses-terminfo-base (6.4_p20240420-r2)
+(24/31) Installing libncursesw (6.4_p20240420-r2)
+(25/31) Installing libpanelw (6.4_p20240420-r2)
+(26/31) Installing readline (8.2.10-r0)
+(27/31) Installing sqlite-libs (3.45.3-r3)
+(28/31) Installing python3 (3.12.13-r0)
+(29/31) Installing python3-pycache-pyc0 (3.12.13-r0)
+(30/31) Installing pyc (3.12.13-r0)
+(31/31) Installing python3-pyc (3.12.13-r0)
+Executing busybox-1.36.1-r31.trigger
+Executing ca-certificates-20260413-r0.trigger
+OK: 148 MiB in 45 packages
+ ---> Removed intermediate container eb080e00a2d8
+ ---> 58923af00c1d
+Step 3/8 : ENV AIRLOCK_REPO=/repo
+ ---> Running in 4ca700571351
+ ---> Removed intermediate container 4ca700571351
+ ---> ea260a0ea42a
+Step 4/8 : WORKDIR /repo
+ ---> Running in 13bf217c749b
+ ---> Removed intermediate container 13bf217c749b
+ ---> e70dbecdaadf
+Step 5/8 : COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+ ---> 4b82a466bf70
+Step 6/8 : RUN chmod +x /usr/local/bin/entrypoint.sh
+ ---> Running in 27735df42d09
+ ---> Removed intermediate container 27735df42d09
+ ---> 5ca38358368c
+Step 7/8 : ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+ ---> Running in 60e6f0d37351
+ ---> Removed intermediate container 60e6f0d37351
+ ---> a2f14d2a57f1
+Step 8/8 : LABEL com.docker.compose.image.builder=classic
+ ---> Running in da58dd142398
+ ---> Removed intermediate container da58dd142398
+ ---> 43f00a2f5068
+Successfully built 43f00a2f5068
+Successfully tagged airlock-updater:latest
+ Image airlock-updater:latest Built 
+ Image airlock-updater:latest Built 
+ Network airlock-stl-generator_default Creating 
+ Network airlock-stl-generator_default Created 
+ Container airlock-stl-generator-updater-1 Creating 
+ Container airlock-stl-generator-updater-1 Created 
+ Container airlock-stl-generator-updater-1 Starting 
+ Container airlock-stl-generator-updater-1 Started 

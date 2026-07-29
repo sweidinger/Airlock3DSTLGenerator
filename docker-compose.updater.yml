@@ -3,16 +3,21 @@
 #
 # Dieser eine Container hat Zugriff auf den Docker-Socket (für Rebuilds) und das
 # Repo. Der Generator-Container bleibt davon unberührt und hat KEINEN Socket.
-# UID/GID passend zum NAS-Benutzer und zur docker-Gruppe (in .env setzen):
+# In .env setzen (NAS-spezifisch):
 #   RUN_UID=<id -u>, DOCKER_GID=<getent group docker | cut -d: -f3>
+#   REPO_PATH=<absoluter Pfad des Repos auf dem Host, z. B. /home/Stefan/airlock-stl-generator>
+# Das Repo wird im Sidecar unter DEMSELBEN Host-Pfad gemountet, damit
+# `docker compose` (über den Socket) den richtigen Projektnamen und korrekte
+# (host-relative) Volume-Pfade verwendet.
 services:
   updater:
     build: ./updater
     image: airlock-updater:latest
     restart: unless-stopped
     user: "${RUN_UID:-0}:${DOCKER_GID:-999}"
+    working_dir: ${REPO_PATH}
     environment:
-      - AIRLOCK_REPO=/repo
+      - AIRLOCK_REPO=${REPO_PATH}
       - AIRLOCK_COMPOSE_SERVICE=airlock-generator
       - WATCH_INTERVAL=60
       - HOME=/tmp
@@ -22,4 +27,4 @@ services:
       - "GIT_CONFIG_VALUE_0=git@github.com:"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./:/repo
+      - ${REPO_PATH}:${REPO_PATH}

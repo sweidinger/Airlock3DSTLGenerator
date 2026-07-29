@@ -1,3 +1,5 @@
+name: airlock-stl-generator
+
 services:
   airlock-generator:
     build:
