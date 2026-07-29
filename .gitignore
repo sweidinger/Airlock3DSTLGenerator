@@ -11,3 +11,4 @@ control/
 *.db-wal
 *.db-shm
 .env
+*.log
