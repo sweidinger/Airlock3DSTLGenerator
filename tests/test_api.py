@@ -96,13 +96,14 @@ def test_dashboard_served():
 
 
 def test_viewer_assets_and_markup():
-    # three.js-Vendor wird unter /static ausgeliefert
-    r = client.get("/static/vendor/STLLoader.js")
-    assert r.status_code == 200
-    # Dashboard enthält Viewer-Modal und Logik
+    # three.js-Vendor + aufgeteilte Assets werden unter /static ausgeliefert
+    for path in ("/static/vendor/STLLoader.js", "/static/app.css",
+                 "/static/app.js", "/static/viewer.js"):
+        assert client.get(path).status_code == 200, path
     html = client.get("/").text
     assert "viewerModal" in html
-    assert "openSTLViewer" in html
+    assert "/static/app.js" in html          # Gerüst verweist auf app.js
+    assert "openSTLViewer" in client.get("/static/viewer.js").text
 
 
 def test_dashboard_no_key_leak_by_default():
