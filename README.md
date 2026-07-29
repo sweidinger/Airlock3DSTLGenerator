@@ -16,11 +16,12 @@ Ausführliches Konzept: siehe [`ARCHITECTURE.md`](ARCHITECTURE.md).
 - API-Key-Authentifizierung, Idempotenz-Schlüssel, Batch-Limit.
 - Automatische OpenAPI-Doku unter `/docs`.
 
-## Voraussetzung: Basis-Vorlage
+## Basis-Vorlage
 
-Die leere Basis-STL `templates/DisposableLock_v2.stl` ist **nicht im Git-Verlauf**
-enthalten (Binärdatei). Lege sie vor dem Start bzw. vor den Tests dort ab — sie
-liegt dem Auslieferungs-ZIP bei. Details: `templates/README.md`.
+Die leere Basis-STL `templates/DisposableLock_v2.stl` ist **im Repository enthalten** —
+der Generator und die Tests laufen out-of-the-box. Du kannst sie durch deine eigene
+Konstruktionsdatei ersetzen; die gegen die Vorlage validierten Präge-Parameter stehen
+in `app/config.py` (`TemplateProfile`) und in `ARCHITECTURE.md` §2.
 
 ## Schnellstart (Docker)
 

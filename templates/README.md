@@ -1,14 +1,13 @@
 # Vorlagen (Templates)
 
-Hier gehört die leere Basis-STL des Airlocks hin:
+Hier liegt die leere Basis-STL des Airlocks:
 
     templates/DisposableLock_v2.stl
 
-Diese Binärdatei ist **nicht im Git-Verlauf enthalten** (sie wurde über die
-automatische Einrichtung nicht mitübertragen). Lege sie hier ab, bevor du den
-Generator startest oder die Tests ausführst — sie liegt dem Auslieferungs-ZIP
-(`airlock-stl-generator.zip`) bei bzw. ist deine Original-Konstruktionsdatei.
+Sie ist im Repository enthalten — Generator und Tests laufen damit out-of-the-box.
+Du kannst sie durch deine eigene Konstruktionsdatei ersetzen; OpenSCAD liest sowohl
+binäre als auch ASCII-STL. Die gegen diese Vorlage validierten Präge-Parameter stehen
+in `app/config.py` (`TemplateProfile`) und in `ARCHITECTURE.md` §2.
 
-OpenSCAD liest sowohl binäre als auch ASCII-STL; beides funktioniert identisch.
-Die gegen diese Vorlage validierten Präge-Parameter stehen in `app/config.py`
-(`TemplateProfile`) und in `ARCHITECTURE.md` §2.
+Weitere Lock-Modelle lassen sich später als zusätzliche `TemplateProfile`-Einträge
+mit eigenen Vorlagen und Präge-Parametern ergänzen.
