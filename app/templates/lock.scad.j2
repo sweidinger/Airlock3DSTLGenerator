@@ -1,0 +1,28 @@
+// Airlock-STL-Generator — parametrisiertes OpenSCAD-Template
+// Erzeugt aus der leeren Vorlage eine Airlock-STL mit erhabener Nummer.
+// Alle Werte werden vom Python-Generator (generator.py) eingesetzt.
+
+code    = "{{ code }}";
+size    = {{ size }};
+xscale  = {{ xscale }};
+depth   = {{ depth }};
+tx      = {{ tx }};
+ty      = {{ ty }};
+font    = "{{ font }}";
+topz    = {{ topz }};
+sink    = {{ sink }};
+
+union() {
+    // Vorlage in Sample-Ausrichtung bringen: 180 Grad um Y, dann in Ursprung normalisieren.
+    translate([{{ tr_x }}, {{ tr_y }}, {{ tr_z }}])
+        rotate([{{ rot_x }}, {{ rot_y }}, {{ rot_z }}])
+            import("{{ base_stl }}");
+
+    // Code erhaben auf die (nun oben liegende) Paddle-Flaeche praegen.
+    // Text sinkt um `sink` in die Deckflaeche ein -> ein einziges wasserdichtes Volumen.
+    translate([tx, ty, topz - sink])
+        scale([xscale, 1, 1])
+            linear_extrude(height = depth + sink)
+                text(code, size = size, font = font,
+                     halign = "left", valign = "baseline");
+}

@@ -1,0 +1,28 @@
+services:
+  airlock-generator:
+    build: .
+    image: airlock-stl-generator:latest
+    environment:
+      - AIRLOCK_API_KEY=${AIRLOCK_API_KEY:?bitte in .env setzen}
+      - AIRLOCK_MAX_BATCH=${AIRLOCK_MAX_BATCH:-200}
+      - AIRLOCK_OUTPUT_DIR=/app/output
+      - AIRLOCK_DB_PATH=/app/data/registry.db
+    volumes:
+      - ./output:/app/output        # Druck-PC greift hierauf zu
+      - airlock-db:/app/data        # SQLite-Registry persistent
+    networks:
+      - kg-internal
+    restart: unless-stopped
+    # Kein öffentliches Port-Mapping: nur im internen Netz erreichbar.
+    # Zum lokalen Testen ggf. einkommentieren:
+    # ports:
+    #   - "127.0.0.1:8000:8000"
+
+volumes:
+  airlock-db:
+
+networks:
+  kg-internal:
+    # Gemeinsames Netz mit der KG-Tracker App. Wenn KG-Tracker das Netz
+    # bereitstellt: external: true. Für Standalone-Betrieb Zeile entfernen.
+    external: true
