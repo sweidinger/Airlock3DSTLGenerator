@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -81,6 +82,30 @@ def latest_tag() -> str:
     return tags[-1] if tags else ""
 
 
+def read_changelog(ref: str) -> str:
+    r = git("show", f"{ref}:CHANGELOG.md")
+    return r.stdout if r.returncode == 0 else ""
+
+
+def parse_changelog(text: str) -> dict:
+    """Zerlegt CHANGELOG.md in {version: notes_text} anhand der ## -Überschriften."""
+    sections: dict = {}
+    cur = None
+    buf: list = []
+    for line in text.splitlines():
+        if line.startswith("## "):
+            if cur:
+                sections[cur] = "\n".join(buf).strip()
+            m = re.search(r"(\d+\.\d+\.\d+)", line)
+            cur = m.group(1) if m else None
+            buf = []
+        elif cur is not None:
+            buf.append(line)
+    if cur:
+        sections[cur] = "\n".join(buf).strip()
+    return sections
+
+
 def apply_update(latest: str) -> None:
     (CTRL / "update.applying").write_text(now())
     (CTRL / "update.request").unlink(missing_ok=True)
@@ -122,8 +147,12 @@ def main() -> None:
         cur = read_version()
         lt = latest_tag()
         latest_ver = lt.lstrip("vV") if lt else cur
+        hist = collect_history()
+        changelog = parse_changelog(read_changelog(lt) if lt else read_changelog("HEAD"))
+        for h in hist:
+            h["notes"] = changelog.get(h["version"], "")
         write_status(current_seen=cur, latest=latest_ver, checked_at=now(),
-                     history=collect_history(),
+                     history=hist, latest_notes=changelog.get(latest_ver, ""),
                      update_available=semver(latest_ver) > semver(cur))
         if (CTRL / "update.request").is_file():
             apply_update(lt)

@@ -68,6 +68,18 @@
   #viewerCanvas{flex:1;width:100%;display:block;
     background:radial-gradient(circle at 50% 38%, #1b2636, #0b111b)}
   .modal .hint{padding:8px 14px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
+  .updchip{cursor:pointer;padding:4px 11px;border-radius:999px;font-size:12px;font-weight:700;
+    background:linear-gradient(90deg,var(--accent),var(--accent2));color:#04121c;
+    animation:updpulse 1.9s ease-in-out infinite}
+  @keyframes updpulse{0%,100%{opacity:1}50%{opacity:.6}}
+  #umBody{flex:1;overflow:auto;padding:16px}
+  .notes h4{margin:10px 0 4px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .notes ul{margin:4px 0 10px;padding-left:18px} .notes li{margin:2px 0}
+  .verblock{border-top:1px solid var(--line);padding:12px 0}
+  .verblock:first-child{border-top:none;padding-top:0}
+  .verblock .vh{display:flex;gap:10px;align-items:baseline}
+  .verblock .vv{font-family:ui-monospace,Menlo,monospace;font-weight:700;color:var(--accent)}
+  .badge-new{background:var(--generated);color:#04121c;padding:1px 8px;border-radius:999px;font-size:10px;font-weight:700}
 </style>
 </head>
 <body>
@@ -76,6 +88,7 @@
   <h1>Airlock-STL-Generator</h1>
   <span class="muted" id="tplName">—</span>
   <span class="mono" id="versionBadge" style="font-size:12px;color:var(--accent)"></span>
+  <span id="updHint" class="updchip" style="display:none" onclick="openUpdatesPage()"></span>
   <div class="conn" id="connControls">
     <input id="baseUrl" style="width:180px" placeholder="Basis-URL (leer = hier)">
     <input id="apiKey" type="password" style="width:190px" placeholder="API-Key (X-API-Key)">
@@ -127,6 +140,7 @@
     <div class="row" style="margin-bottom:12px">
       <h2 style="margin:0">Version &amp; Updates</h2>
       <button class="secondary" id="reloadUpdates">Prüfen</button>
+      <button class="secondary" id="openUpdatesBtn">Changelog</button>
       <small class="hint" id="updateChecked"></small>
     </div>
     <div class="row" style="gap:22px;align-items:flex-start">
@@ -183,6 +197,17 @@
     </div>
     <canvas id="viewerCanvas"></canvas>
     <div class="hint">Ziehen = drehen · Scrollen = zoomen · Rechtsklick-Ziehen = verschieben</div>
+  </div>
+</div>
+
+<div class="modal" id="updatesModal">
+  <div class="box">
+    <div class="bar">
+      <h3 style="font-family:inherit">Updates &amp; Changelog</h3>
+      <span id="umState" style="margin-left:12px"></span>
+      <button class="secondary" style="margin-left:auto" onclick="closeUpdatesPage()">Schließen</button>
+    </div>
+    <div id="umBody"></div>
   </div>
 </div>
 
@@ -399,9 +424,50 @@ async function refreshVersion(){
   }catch(e){ $('#versionBadge').textContent=''; }
 }
 
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function notesToHtml(notes){
+  if(!notes) return '<div class="muted">Keine Notes hinterlegt.</div>';
+  let html='', inUl=false; const closeUl=()=>{ if(inUl){html+='</ul>';inUl=false;} };
+  for(const raw of notes.split('\n')){
+    const l=raw.trim();
+    if(l.startsWith('### ')){ closeUl(); html+='<h4>'+esc(l.slice(4))+'</h4>'; }
+    else if(l.startsWith('- ')||l.startsWith('* ')){ if(!inUl){html+='<ul>';inUl=true;} html+='<li>'+esc(l.slice(2))+'</li>'; }
+    else if(l){ closeUl(); html+='<div>'+esc(l)+'</div>'; }
+  }
+  closeUl(); return '<div class="notes">'+html+'</div>';
+}
+function renderUpdates(u){
+  let s = u.applying?'<span class="pill" style="background:var(--warn)">läuft…</span>'
+    : u.update_available?'<span class="pill" style="background:var(--generated)">Update verfügbar</span>'
+    : '<span class="pill" style="background:var(--active)">aktuell</span>';
+  $('#umState').innerHTML = s;
+  let head = `<div class="row" style="gap:16px;margin-bottom:6px;align-items:center">
+    <div class="kv"><span class="kk">Aktuell</span><span class="mono">v${u.current}</span>
+      <span class="kk">Neueste</span><span class="mono">v${u.latest||'?'}</span></div>`;
+  if(u.update_available) head += `<button id="umApply" ${(u.applying||u.requested)?'disabled':''}>Update anwenden${u.applying?' (läuft…)':''}</button>`;
+  head += '</div>';
+  const hist = u.history||[];
+  const body = hist.length ? hist.map(h=>`<div class="verblock">
+      <div class="vh"><span class="vv">v${h.version}</span><span class="muted">${h.date||''}</span>
+        ${(h.version===u.latest && u.update_available)?'<span class="badge-new">neu</span>':''}</div>
+      ${h.subject?('<div class="muted" style="margin:3px 0 4px">'+esc(h.subject)+'</div>'):''}
+      ${notesToHtml(h.notes)}</div>`).join('')
+    : '<div class="muted">keine Versionen</div>';
+  $('#umBody').innerHTML = head + body;
+  const b = document.getElementById('umApply'); if(b) b.onclick = applyUpdate;
+}
+function openUpdatesPage(){ document.getElementById('updatesModal').style.display='flex';
+  if(window._lastUpd) renderUpdates(window._lastUpd); else refreshUpdates(); }
+function closeUpdatesPage(){ document.getElementById('updatesModal').style.display='none'; }
+
 async function refreshUpdates(){
   try{
     const u = await api('/v1/update/status');
+    window._lastUpd = u;
+    const hint = $('#updHint');
+    if(u.update_available){ hint.style.display=''; hint.textContent='⬆ Update v'+u.latest+' verfügbar'; }
+    else hint.style.display='none';
+    if(document.getElementById('updatesModal').style.display==='flex') renderUpdates(u);
     $('#uCurrent').textContent = 'v'+(u.current||'?');
     $('#uLatest').textContent  = u.latest ? ('v'+u.latest) : '—';
     $('#updateChecked').textContent = u.checked_at ? ('geprüft '+fmtDate(u.checked_at))
@@ -452,6 +518,10 @@ $('#reloadAirlocks').onclick = refreshAirlocks;
 $('#reloadBatches').onclick = refreshBatches;
 $('#reloadUpdates').onclick = refreshUpdates;
 $('#applyUpdateBtn').onclick = applyUpdate;
+$('#openUpdatesBtn').onclick = openUpdatesPage;
+document.getElementById('updatesModal').addEventListener('click', e=>{
+  if(e.target.id==='updatesModal') closeUpdatesPage();
+});
 $('#filterStatus').onchange = refreshAirlocks;
 $('#apiKey').addEventListener('keydown',e=>{if(e.key==='Enter')connect();});
 $('#baseUrl').value = localStorage.getItem('airlock_base')||'';

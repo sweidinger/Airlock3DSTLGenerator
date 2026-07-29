@@ -45,6 +45,7 @@ def read_status() -> dict:
         "update_available": update_available,
         "checked_at": st.get("checked_at"),
         "history": st.get("history", []),
+        "latest_notes": st.get("latest_notes", ""),
         "requested": (d / "update.request").is_file(),
         "applying": (d / "update.applying").is_file(),
         "last_result": st.get("last_result"),
