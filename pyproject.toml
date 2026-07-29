@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+# Projektwurzel auf den Importpfad legen, damit `import app` / `import tests`
+# auch bei bloßem `pytest` (ohne `python -m`) funktioniert (z. B. in CI).
+pythonpath = ["."]
+addopts = "-q"
+testpaths = ["tests"]
