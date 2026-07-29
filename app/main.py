@@ -4,13 +4,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 from .auth import require_api_key
 from .config import settings
 from .generator import validate_code
 from .models import AirlockOut, BatchOut, GenerateRequest, StatusUpdate
-from .registry import CodeExhaustionError
+from .registry import STATUSES, CodeExhaustionError
 from .service import AirlockService
 
 app = FastAPI(
@@ -18,6 +18,8 @@ app = FastAPI(
     version="1.0.0",
     description="Erzeugt Airlock-STLs mit erhabener 5-stelliger Nummer für die KG-Tracker App.",
 )
+
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 _service: AirlockService | None = None
 
@@ -27,6 +29,15 @@ def get_service() -> AirlockService:
     if _service is None:
         _service = AirlockService()
     return _service
+
+
+# ---- Web-Dashboard (ohne Auth; API-Aufrufe darin nutzen den API-Key) ---
+@app.get("/", include_in_schema=False)
+def dashboard():
+    index = _STATIC_DIR / "index.html"
+    if not index.is_file():
+        raise HTTPException(404, "Dashboard nicht gefunden.")
+    return HTMLResponse(index.read_text(encoding="utf-8"))
 
 
 # ---- Health (ohne Auth) ----------------------------------------------
@@ -130,6 +141,65 @@ def download_zip(batch_id: str, svc: AirlockService = Depends(get_service)):
     if not p.is_file():
         raise HTTPException(410, "ZIP nicht mehr auf dem Datenträger.")
     return FileResponse(p, media_type="application/zip", filename=p.name)
+
+
+# ---- Dashboard-Daten (Stats / Batches / Config) ----------------------
+@app.get("/v1/stats", dependencies=[Depends(require_api_key)], tags=["dashboard"])
+def stats(svc: AirlockService = Depends(get_service)):
+    counts = svc.registry.status_counts()
+    total = sum(counts.values())
+    space = settings.code_space
+    return {
+        "template": settings.profile.name,
+        "code_length": settings.code_length,
+        "code_space": space,
+        "used": total,
+        "free": space - total,
+        "usage_pct": round(100 * total / space, 3) if space else 0,
+        "max_batch": settings.max_batch,
+        "by_status": {s: counts.get(s, 0) for s in STATUSES},
+        "template_ready": Path(settings.profile.base_stl).is_file(),
+    }
+
+
+@app.get("/v1/batches", dependencies=[Depends(require_api_key)], tags=["batches"])
+def list_batches(limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0),
+                 svc: AirlockService = Depends(get_service)):
+    rows = svc.registry.list_batches(limit=limit, offset=offset)
+    return [{
+        "batch_id": r["batch_id"], "count": r["count"], "status": r["status"],
+        "created_at": r["created_at"], "requested_by": r["requested_by"],
+        "zip_url": (f"/v1/batches/{r['batch_id']}/zip" if r["zip_path"] else None),
+    } for r in rows]
+
+
+@app.get("/v1/config", dependencies=[Depends(require_api_key)], tags=["dashboard"])
+def config():
+    p = settings.profile
+    key = settings.api_key
+    masked = (key[:3] + "…" + key[-2:]) if len(key) > 6 else "••••"
+    return {
+        "api_key_masked": masked,
+        "max_batch": settings.max_batch,
+        "code_length": settings.code_length,
+        "output_dir": str(settings.output_dir),
+        "openscad_bin": settings.openscad_bin,
+        "render_timeout": settings.render_timeout,
+        "profile": {
+            "name": p.name,
+            "font": p.font,
+            "size": p.size,
+            "xscale": p.xscale,
+            "depth": p.depth,
+            "sink": p.sink,
+            "tx": p.tx,
+            "ty": p.ty,
+            "topz": p.topz,
+            "rotate_deg": list(p.rot),
+            "translate": list(p.translate),
+            "expected_bounds_max": list(p.expected_bounds_max),
+        },
+    }
 
 
 # ---- Helpers ----------------------------------------------------------

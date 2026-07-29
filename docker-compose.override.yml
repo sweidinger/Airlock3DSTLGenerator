@@ -1,0 +1,4 @@
+services:
+  airlock-generator:
+    ports:
+      - "127.0.0.1:8010:8000"

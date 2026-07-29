@@ -190,5 +190,18 @@ class Registry:
             "SELECT * FROM airlocks WHERE batch_id = ? ORDER BY code", (batch_id,)
         ).fetchall()
 
+    def list_batches(self, limit: int = 100, offset: int = 0) -> list[sqlite3.Row]:
+        return self._conn.execute(
+            "SELECT * FROM batches ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        ).fetchall()
+
+    def status_counts(self) -> dict[str, int]:
+        """Anzahl Airlocks je Status (nur belegte Status)."""
+        rows = self._conn.execute(
+            "SELECT status, COUNT(*) AS n FROM airlocks GROUP BY status"
+        ).fetchall()
+        return {r["status"]: r["n"] for r in rows}
+
     def close(self) -> None:
         self._conn.close()
