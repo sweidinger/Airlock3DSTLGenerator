@@ -10,3 +10,5 @@ output/*
 *.db-wal
 *.db-shm
 .env
+build.log
+docker-compose.override.yml
