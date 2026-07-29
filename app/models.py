@@ -41,6 +41,21 @@ class BatchOut(BaseModel):
     conflicts: list[str] = Field(default_factory=list, description="Vorgegebene, bereits vergebene Codes")
 
 
+class ThreeMFRequest(BaseModel):
+    """Mehrfarb-3MF-Export: entweder `codes` ODER `batch_id`."""
+    codes: Optional[list[str]] = Field(default=None, description="Konkrete Codes für den Export")
+    batch_id: Optional[str] = Field(default=None, description="Alle Airlocks dieses Batches exportieren")
+    plate: Optional[float] = Field(default=None, gt=0, description="Bauplatten-Kantenlänge in mm (Default 256)")
+    margin: Optional[float] = Field(default=None, ge=0, description="Randabstand in mm")
+    gap: Optional[float] = Field(default=None, ge=0, description="Lücke zwischen den Teilen in mm")
+
+    @model_validator(mode="after")
+    def _exactly_one(self):
+        if bool(self.codes) == bool(self.batch_id):
+            raise ValueError("Genau eines von 'codes' oder 'batch_id' angeben.")
+        return self
+
+
 class StatusUpdate(BaseModel):
     status: str
 

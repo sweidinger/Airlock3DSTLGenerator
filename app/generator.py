@@ -56,11 +56,12 @@ class Generator:
         if not Path(self.profile.base_stl).is_file():
             raise GeneratorError(f"Vorlage nicht gefunden: {self.profile.base_stl}")
 
-    def _render_scad(self, code: str) -> str:
+    def _render_scad(self, code: str, part: str = "both") -> str:
         p = self.profile
         tpl = _jinja.get_template("lock.scad.j2")
         return tpl.render(
             code=code,
+            part=part,
             size=p.size,
             xscale=p.xscale,
             depth=p.depth,
@@ -74,17 +75,22 @@ class Generator:
             tr_x=p.translate[0], tr_y=p.translate[1], tr_z=p.translate[2],
         )
 
-    def render(self, code: str, out_path: Path | None = None) -> RenderResult:
-        """Erzeugt die STL fuer `code`. Schreibt nach `out_path` oder ins Output-Verzeichnis."""
+    def render(self, code: str, out_path: Path | None = None, part: str = "both") -> RenderResult:
+        """Erzeugt die STL fuer `code`. Schreibt nach `out_path` oder ins Output-Verzeichnis.
+
+        `part`: "both" (Standard, Vorlage+Code), "body" (Vorlage mit Aussparung)
+        oder "code" (nur die erhabene Nummer) — für Mehrfarb-3MF-Export.
+        """
         code = validate_code(code, self.cfg.code_length)
         if out_path is None:
             out_dir = Path(self.cfg.output_dir)
             out_dir.mkdir(parents=True, exist_ok=True)
-            out_path = out_dir / f"{self.profile.name}_{code}.stl"
+            suffix = "" if part == "both" else f"_{part}"
+            out_path = out_dir / f"{self.profile.name}_{code}{suffix}.stl"
         out_path = Path(out_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
-        scad_text = self._render_scad(code)
+        scad_text = self._render_scad(code, part=part)
         with tempfile.NamedTemporaryFile("w", suffix=".scad", delete=False) as fh:
             fh.write(scad_text)
             scad_file = fh.name

@@ -1,6 +1,11 @@
 // Airlock-STL-Generator — parametrisiertes OpenSCAD-Template
 // Erzeugt aus der leeren Vorlage eine Airlock-STL mit erhabener Nummer.
 // Alle Werte werden vom Python-Generator (generator.py) eingesetzt.
+//
+// `part` steuert, was gerendert wird:
+//   "both" -> Vorlage + Code als ein Volumen (Standard, Einzel-STL)
+//   "body" -> Vorlage MINUS Code-Volumen (Aussparung, für Mehrfarb-3MF, schwarz)
+//   "code" -> nur das Code-Volumen (füllt die Aussparung, für Mehrfarb-3MF, weiß)
 
 code    = "{{ code }}";
 size    = {{ size }};
@@ -11,18 +16,36 @@ ty      = {{ ty }};
 font    = "{{ font }}";
 topz    = {{ topz }};
 sink    = {{ sink }};
+part    = "{{ part }}";
 
-union() {
+module lock_base() {
     // Vorlage in Sample-Ausrichtung bringen: 180 Grad um Y, dann in Ursprung normalisieren.
     translate([{{ tr_x }}, {{ tr_y }}, {{ tr_z }}])
         rotate([{{ rot_x }}, {{ rot_y }}, {{ rot_z }}])
             import("{{ base_stl }}");
+}
 
+module code_solid() {
     // Code erhaben auf die (nun oben liegende) Paddle-Flaeche praegen.
-    // Text sinkt um `sink` in die Deckflaeche ein -> ein einziges wasserdichtes Volumen.
+    // Reicht um `sink` unter die Deckflaeche -> sauberer Verbund/Aussparung.
     translate([tx, ty, topz - sink])
         scale([xscale, 1, 1])
             linear_extrude(height = depth + sink)
                 text(code, size = size, font = font,
                      halign = "left", valign = "baseline");
+}
+
+if (part == "code") {
+    code_solid();
+} else if (part == "body") {
+    difference() {
+        lock_base();
+        code_solid();
+    }
+} else {
+    // "both": unveraendertes Einzel-STL (Vorlage + erhabener Code als ein Volumen).
+    union() {
+        lock_base();
+        code_solid();
+    }
 }

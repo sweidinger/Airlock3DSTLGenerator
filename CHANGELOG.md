@@ -3,6 +3,22 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.3.0] - 2026-07-30
+### Hinzugefügt
+- Mehrfarb-3MF-Export für Bambu Lab (X1/P1/A1, 256×256): Schloss in Schwarz,
+  Nummer in Weiß als getrennte Objekte, im Raster auf der Bauplatte angeordnet.
+  Farben über Basismaterialien (keine feste AMS-Slot-Zuweisung).
+- API: `POST /v1/airlocks:threemf` (aus Codes oder einem Batch) und
+  `GET /v1/threemf/{name}` zum Download.
+- Dashboard: Checkboxen je Airlock plus „3MF aus Auswahl", 3MF-Button je Batch
+  und im Generier-Ergebnis. Rückmeldung zu Rastergröße und Plattenpassung.
+- Generator: OpenSCAD-Vorlage um `part` erweitert (`body`/`code`/`both`); Body
+  trägt die Code-Aussparung, der Code füllt sie exakt (kein Überlappen).
+
+### Behoben
+- CI: Actions auf Node-24-Versionen gehoben (`actions/checkout@v5`,
+  `actions/setup-python@v6`) — Node-20-Deprecation-Warnung entfällt.
+
 ## [1.2.2] - 2026-07-30
 ### Geändert
 - Intern: `index.html` in schlankes Gerüst plus `app.css`, `app.js` und
