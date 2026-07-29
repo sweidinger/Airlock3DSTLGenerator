@@ -3,6 +3,12 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.2.1] - 2026-07-30
+### Geändert
+- Updates/Changelog jetzt als eigene Seite statt Popup; Navigationsleiste oben
+  rechts im Header (Dashboard / Changelog).
+- Das „Version & Updates"-Feld ist von der Hauptseite entfernt.
+
 ## [1.2.0] - 2026-07-29
 ### Hinzugefügt
 - Update-Seite im Dashboard („Updates & Changelog") mit Release-Notes je Version.
