@@ -3,6 +3,11 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.2.2] - 2026-07-30
+### Geändert
+- Intern: `index.html` in schlankes Gerüst plus `app.css`, `app.js` und
+  `viewer.js` aufgeteilt (kleinere Dateien, sauberere Diffs, keine Funktionsänderung).
+
 ## [1.2.1] - 2026-07-30
 ### Geändert
 - Updates/Changelog jetzt als eigene Seite statt Popup; Navigationsleiste oben
