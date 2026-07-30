@@ -120,7 +120,7 @@ function showView(name){
   const nk=$('#navKg'); if(nk) nk.classList.toggle('active', name==='kg');
   $('#navUpdates').classList.toggle('active', name==='updates');
   if(name==='updates'){ if(window._lastUpd) renderUpdatesPage(window._lastUpd); refreshUpdates(); }
-  if(name==='kg'){ refreshNfcSecret(); refreshKgKeys(); refreshKgLog(); startKgAuto(); } else { stopKgAuto(); }
+  if(name==='kg'){ refreshNfcSecret(); refreshKgKeys(); refreshWriterKeys(); refreshKgLog(); startKgAuto(); } else { stopKgAuto(); }
 }
 
 async function refreshStats(){
@@ -380,6 +380,41 @@ async function regenerateKgKey(id){
   try{ const j=await api('/v1/kg/keys/'+id+'/regenerate',{method:'POST'}); showNewKgKey(j); refreshKgKeys(); }
   catch(e){ toast('Fehler: '+e.message,'err'); }
 }
+
+// ---- Writer-Keys (native iOS-App) ----
+async function refreshWriterKeys(){
+  try{
+    const rows = await api('/v1/writer/keys');
+    $('#wrKeyRows').innerHTML = rows.length ? rows.map(r=>`<tr>
+      <td>${esc(r.name)}</td>
+      <td class="mono">${esc(r.key_prefix)}…</td>
+      <td class="muted">${fmtDate(r.created_at)}</td>
+      <td class="muted">${r.last_used_at?fmtDate(r.last_used_at):'—'}</td>
+      <td>${r.active?'<span class="pill" style="background:var(--active)">aktiv</span>':'<span class="pill" style="background:var(--retired)">widerrufen</span>'}</td>
+      <td class="row" style="gap:6px">${r.active?
+        `<button class="secondary wrReg" data-id="${r.id}">Regenerate</button>
+         <button class="secondary wrRev" data-id="${r.id}">Widerrufen</button>`:'—'}</td>
+    </tr>`).join('') : `<tr><td colspan="6" class="muted">keine Keys</td></tr>`;
+    document.querySelectorAll('.wrRev').forEach(b=>b.onclick=()=>revokeWriterKey(b.dataset.id));
+    document.querySelectorAll('.wrReg').forEach(b=>b.onclick=()=>regenerateWriterKey(b.dataset.id));
+  }catch(e){ $('#wrKeyRows').innerHTML=`<tr><td colspan="6" class="err">${esc(e.message)}</td></tr>`; }
+}
+function showNewWriterKey(j){ $('#wrNewKey').value=j.key; $('#wrNewKeyBox').style.display=''; toast('Key erzeugt — nur jetzt sichtbar','ok'); }
+async function createWriterKey(){
+  const name=($('#wrKeyName').value||'').trim()||'Writer';
+  try{ const j=await api('/v1/writer/keys',{method:'POST',body:{name}}); $('#wrKeyName').value=''; showNewWriterKey(j); refreshWriterKeys(); }
+  catch(e){ toast('Fehler: '+e.message,'err'); }
+}
+async function revokeWriterKey(id){
+  if(!confirm('Diesen Writer-Key widerrufen? Die iOS-App kann damit keine Tags mehr beschreiben.')) return;
+  try{ await api('/v1/writer/keys/'+id+'/revoke',{method:'POST'}); toast('Key widerrufen','ok'); refreshWriterKeys(); }
+  catch(e){ toast('Fehler: '+e.message,'err'); }
+}
+async function regenerateWriterKey(id){
+  if(!confirm('Neuen Writer-Key erzeugen? Der bisherige wird sofort ungültig.')) return;
+  try{ const j=await api('/v1/writer/keys/'+id+'/regenerate',{method:'POST'}); showNewWriterKey(j); refreshWriterKeys(); }
+  catch(e){ toast('Fehler: '+e.message,'err'); }
+}
 function kgNoteCls(n){ if(!n) return ''; if(n.indexOf('True')>=0) return 'ok';
   if(n.indexOf('False')>=0||n.indexOf('auth_failed')>=0) return 'err'; return ''; }
 async function refreshKgLog(){
@@ -452,6 +487,11 @@ if($('#kgKeyName')) $('#kgKeyName').addEventListener('keydown',e=>{if(e.key==='E
 if($('#kgNewKeyCopy')) $('#kgNewKeyCopy').onclick = ()=>{ const t=$('#kgNewKey').value;
   if(t && navigator.clipboard){ navigator.clipboard.writeText(t); toast('Kopiert','ok'); } };
 if($('#kgNewKeyHide')) $('#kgNewKeyHide').onclick = ()=>{ $('#kgNewKeyBox').style.display='none'; $('#kgNewKey').value=''; };
+if($('#wrCreateBtn')) $('#wrCreateBtn').onclick = createWriterKey;
+if($('#wrKeyName')) $('#wrKeyName').addEventListener('keydown',e=>{if(e.key==='Enter')createWriterKey();});
+if($('#wrNewKeyCopy')) $('#wrNewKeyCopy').onclick = ()=>{ const t=$('#wrNewKey').value;
+  if(t && navigator.clipboard){ navigator.clipboard.writeText(t); toast('Kopiert','ok'); } };
+if($('#wrNewKeyHide')) $('#wrNewKeyHide').onclick = ()=>{ $('#wrNewKeyBox').style.display='none'; $('#wrNewKey').value=''; };
 if($('#kgLogReload')) $('#kgLogReload').onclick = refreshKgLog;
 if($('#kgLogClear')) $('#kgLogClear').onclick = clearKgLog;
 if($('#kgAuto')) $('#kgAuto').onchange = startKgAuto;
