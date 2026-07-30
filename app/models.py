@@ -93,6 +93,12 @@ class KgKeyCreate(BaseModel):
                       description="Anzeigename zur Wiedererkennung")
 
 
+class WriterKeyCreate(BaseModel):
+    """Erzeugt einen Writer-Key fuer die native NFC-Writer-App."""
+    name: str = Field(default="Writer", max_length=64,
+                      description="Anzeigename zur Wiedererkennung (z. B. iPhone Werkstatt)")
+
+
 class NfcSecretGenerate(BaseModel):
     """Erzeugt/rotiert das NFC-Secret (macht bestehende Tags ungueltig!)."""
     confirm: bool = Field(default=False, description="Muss true sein (Bestaetigung).")
