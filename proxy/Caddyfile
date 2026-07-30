@@ -8,10 +8,14 @@
 # AIRLOCK_SITE_ADDR: vollstaendige Site-Adresse inkl. Host/IP, damit das
 #   Zertifikat zur aufgerufenen Adresse passt, z. B. "https://10.0.1.9:8443".
 #   Leer -> ":8443" (nur Port; Zertifikat ohne passenden Host -> Warnung).
+# AIRLOCK_TLS_SNI: Server-Name fuer Verbindungen OHNE SNI (typisch beim Zugriff
+#   ueber eine IP-Adresse). Muss dem Host aus AIRLOCK_SITE_ADDR entsprechen,
+#   z. B. "10.0.1.9" -> sonst schlaegt der TLS-Handshake bei IP-Zugriff fehl.
 # AIRLOCK_UPSTREAM: Ziel, z. B. "airlock-generator:8000" (gleiches Docker-Netz)
 #   oder "<nas-ip>:8010" (bereits veroeffentlichter HTTP-Port).
 {
 	auto_https disable_redirects
+	default_sni {$AIRLOCK_TLS_SNI}
 }
 
 {$AIRLOCK_SITE_ADDR::8443} {

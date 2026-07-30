@@ -5,9 +5,11 @@
 #   AIRLOCK_UPSTREAM=airlock-generator:8000 \
 #   docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
 #
-# Variante B – standalone gegen den bereits per HTTP veroeffentlichten Port:
+# Variante B – standalone gegen den bereits per HTTP veroeffentlichten Port,
+# Zugriff per IP (SNI-loser Zugriff -> AIRLOCK_TLS_SNI setzen):
 #   AIRLOCK_UPSTREAM=<nas-ip>:8010  AIRLOCK_SITE_ADDR=https://<nas-ip>:8443 \
-#   AIRLOCK_HTTPS_PORT=8453  docker compose -f docker-compose.proxy.yml up -d
+#   AIRLOCK_TLS_SNI=<nas-ip>  AIRLOCK_HTTPS_PORT=8453 \
+#   docker compose -f docker-compose.proxy.yml up -d
 #
 # Danach: https://<nas-ip>:<AIRLOCK_HTTPS_PORT>  (einmalig Caddy-Root-CA
 # auf dem Geraet installieren -> siehe docs/NFC.md).
@@ -24,6 +26,8 @@ services:
       # Vollstaendige Site-Adresse inkl. Host/IP fuers TLS-Zertifikat, z. B.
       # "https://10.0.1.9:8443". Leer = nur Port (":8443", Zertifikat ohne Host).
       AIRLOCK_SITE_ADDR: "${AIRLOCK_SITE_ADDR:-}"
+      # Default-ServerName fuer Verbindungen ohne SNI (IP-Zugriff).
+      AIRLOCK_TLS_SNI: "${AIRLOCK_TLS_SNI:-localhost}"
     volumes:
       - ./proxy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
