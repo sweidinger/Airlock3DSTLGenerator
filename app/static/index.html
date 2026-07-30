@@ -104,6 +104,36 @@
   <!-- ===== Ansicht: KG-Tracker ===== -->
   <div id="viewKg" style="display:none">
     <section class="card">
+      <h2>NFC-Secret <span class="muted" id="nfcSecStatus" style="text-transform:none;font-weight:400"></span></h2>
+      <p class="hint" style="margin:.2em 0 0">
+        Signiert die NFC-Tags (HMAC). <b>Einmal setzen, dann nie mehr ändern</b> — ein neues
+        Secret macht alle bereits beschriebenen Tags ungültig. Das Passwort schützt nur die
+        Backup-Datei; das Secret selbst ist zufällig und stark. Nach dem Setzen unbedingt ein
+        Backup exportieren und sicher ablegen.
+      </p>
+      <div class="row" style="margin:12px 0;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <button id="nfcSecGenBtn">Secret erzeugen / rotieren</button>
+        <div class="row" style="gap:6px">
+          <input id="nfcSecBkPw" type="password" placeholder="Backup-Passwort" style="width:170px">
+          <button class="secondary" id="nfcSecBackupBtn">Backup exportieren</button>
+        </div>
+        <div class="row" style="gap:6px">
+          <input id="nfcSecFile" type="file" accept=".json,application/json" style="max-width:190px">
+          <input id="nfcSecRsPw" type="password" placeholder="Passwort" style="width:130px">
+          <button class="secondary" id="nfcSecRestoreBtn">Wiederherstellen</button>
+        </div>
+      </div>
+      <div id="nfcSecNewBox" class="card" style="display:none;border-color:var(--accent)">
+        <div class="hint" style="color:var(--warn)">⚠ Secret wird <b>nur jetzt</b> angezeigt — jetzt ein Backup exportieren und/oder sicher notieren.</div>
+        <div class="row" style="margin-top:8px">
+          <input id="nfcSecNew" class="mono" readonly style="flex:1;min-width:240px">
+          <button class="secondary" id="nfcSecNewCopy">Kopieren</button>
+          <button class="secondary" id="nfcSecNewHide">Verbergen</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
       <h2>KG-Tracker API-Keys</h2>
       <p class="hint" style="margin:.2em 0 0">
         Eingeschränkte Keys für die KG-Tracker-App: dürfen Airlocks <b>lesen</b>, den
