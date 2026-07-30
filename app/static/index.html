@@ -20,6 +20,7 @@
   </div>
   <nav class="topnav" id="topnav">
     <button class="navbtn active" id="navDashboard">Dashboard</button>
+    <button class="navbtn" id="navKg">KG-Tracker</button>
     <button class="navbtn" id="navUpdates">Changelog</button>
   </nav>
 </header>
@@ -96,6 +97,51 @@
         <table><thead><tr>
           <th>Batch-ID</th><th>Anzahl</th><th>Status</th><th>Angefordert von</th><th>Erstellt</th><th>Export</th>
         </tr></thead><tbody id="batchRows"><tr><td colspan="6" class="muted">— nicht verbunden —</td></tr></tbody></table>
+      </div>
+    </section>
+  </div>
+
+  <!-- ===== Ansicht: KG-Tracker ===== -->
+  <div id="viewKg" style="display:none">
+    <section class="card">
+      <h2>KG-Tracker API-Keys</h2>
+      <p class="hint" style="margin:.2em 0 0">
+        Eingeschränkte Keys für die KG-Tracker-App: dürfen Airlocks <b>lesen</b>, den
+        <b>Status ändern</b> und NFC-Tags <b>verifizieren</b> — aber nicht generieren,
+        herunterladen oder Tags schreiben. Key erzeugen, einmalig kopieren und in den
+        Einstellungen der KG-Tracker-App eintragen.
+      </p>
+      <div class="row" style="margin:12px 0">
+        <input id="kgKeyName" placeholder="Name (z. B. Handy Stefan)" style="min-width:220px">
+        <button id="kgCreateBtn">Key erzeugen</button>
+      </div>
+      <div id="kgNewKeyBox" class="card" style="display:none;border-color:var(--accent)">
+        <div class="hint" style="color:var(--warn)">⚠ Dieser Key wird <b>nur jetzt</b> angezeigt — kopieren und in der KG-Tracker-App eintragen.</div>
+        <div class="row" style="margin-top:8px">
+          <input id="kgNewKey" class="mono" readonly style="flex:1;min-width:240px">
+          <button class="secondary" id="kgNewKeyCopy">Kopieren</button>
+          <button class="secondary" id="kgNewKeyHide">Verbergen</button>
+        </div>
+      </div>
+      <div class="tablewrap" style="margin-top:12px">
+        <table><thead><tr>
+          <th>Name</th><th>Präfix</th><th>Erstellt</th><th>Zuletzt genutzt</th><th>Status</th><th>Aktionen</th>
+        </tr></thead><tbody id="kgKeyRows"><tr><td colspan="6" class="muted">— nicht verbunden —</td></tr></tbody></table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row" style="margin-bottom:12px">
+        <h2 style="margin:0">Debug-Log <span class="muted" style="text-transform:none;font-weight:400">(letzte ~500, nach Neustart leer)</span></h2>
+        <label class="row" style="gap:6px"><input type="checkbox" id="kgAuto" checked> Auto</label>
+        <button class="secondary" id="kgLogReload">Aktualisieren</button>
+        <button class="secondary" id="kgLogClear">Leeren</button>
+        <small class="hint" id="kgLogCount" style="margin-left:auto"></small>
+      </div>
+      <div class="tablewrap">
+        <table><thead><tr>
+          <th>Zeit</th><th>Methode</th><th>Pfad</th><th>Key</th><th>HTTP</th><th>Ergebnis</th>
+        </tr></thead><tbody id="kgLogRows"><tr><td colspan="6" class="muted">— keine Einträge —</td></tr></tbody></table>
       </div>
     </section>
   </div>

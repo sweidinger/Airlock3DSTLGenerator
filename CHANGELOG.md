@@ -3,6 +3,26 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.6.0] - 2026-07-30
+### Hinzugefügt
+- Eingeschränkte **KG-Tracker-API-Keys**: eigener Dashboard-Bereich „KG-Tracker",
+  in dem man benannte Keys erzeugt (einmalig anzeigbar), widerruft und neu erzeugt
+  (Regenerate). Diese Keys dürfen nur **lesen**, den **Status wechseln** und NFC
+  **verifizieren** — nicht generieren, herunterladen oder Tags schreiben. Keys
+  werden nur als SHA-256-Hash gespeichert. API: `POST/GET /v1/kg/keys`,
+  `…/revoke`, `…/regenerate`.
+- **Debug-Log** im Dashboard: In-Memory-Ringpuffer (letzte ~500) der KG-Key-
+  Anfragen (Methode, Pfad, Key-Präfix/Name, HTTP-Status, Ergebnis) — ohne den Key
+  selbst. API: `GET /v1/kg/log`, `POST /v1/kg/log:clear`.
+- `GET /v1/airlocks?available=true`: liefert nur verfügbare Locks (NFC-Tag
+  gebunden, Status noch frei) — für die Lock-Auswahl im KG-Tracker.
+- `POST …/nfc/verify` optional mit `require_status` (z. B. `active`) → neuer Grund
+  `status_mismatch`.
+### Geändert
+- `GET /v1/airlocks`, `GET /v1/airlocks/{code}`, `PATCH /v1/airlocks/{code}` und
+  `…/nfc/verify` akzeptieren jetzt **auch** einen KG-Tracker-Key (zusätzlich zum
+  vollen API-Key). Alle übrigen Endpunkte bleiben dem vollen Key vorbehalten.
+
 ## [1.5.0] - 2026-07-30
 ### Hinzugefügt
 - NFC-Tag-Unterstützung als Echtheits-/Kopierschutz: pro Lock wird ein signierter
