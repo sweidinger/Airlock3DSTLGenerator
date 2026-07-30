@@ -1,5 +1,5 @@
 import Foundation
-import CoreNFC
+@preconcurrency import CoreNFC
 
 /// Schreibt einen Airlock-NFC-Tag per Core NFC.
 ///

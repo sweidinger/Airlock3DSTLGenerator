@@ -24,6 +24,9 @@
 	<true/>
 	<key>UILaunchScreen</key>
 	<dict/>
+	<!-- iPhone-only NFC-Tool: nur Hochformat, Vollbild -> unterdrueckt die Orientierungs-Warnung. -->
+	<key>UIRequiresFullScreen</key>
+	<true/>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
