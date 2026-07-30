@@ -78,6 +78,21 @@ class Registry:
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_airlocks_nfcuid ON airlocks(nfc_uid)"
             )
+            # Eingeschraenkte API-Keys fuer die KG-Tracker-App (nur Hash gespeichert).
+            self._conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS kg_api_keys (
+                    id           TEXT PRIMARY KEY,
+                    name         TEXT NOT NULL,
+                    key_hash     TEXT NOT NULL UNIQUE,
+                    key_prefix   TEXT NOT NULL,
+                    created_at   TEXT NOT NULL,
+                    last_used_at TEXT,
+                    revoked_at   TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_kgkeys_hash ON kg_api_keys(key_hash);
+                """
+            )
 
     # ---- Code-Vergabe -------------------------------------------------
     def _exists(self, code: str) -> bool:
@@ -196,6 +211,51 @@ class Registry:
             )
         return self.get_airlock(code)
 
+    # ---- KG-Tracker-API-Keys -----------------------------------------
+    def create_kg_key(self, key_id: str, name: str, key_hash: str,
+                      key_prefix: str) -> sqlite3.Row:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO kg_api_keys(id,name,key_hash,key_prefix,created_at)"
+                " VALUES(?,?,?,?,?)",
+                (key_id, name, key_hash, key_prefix, _now()),
+            )
+        return self.get_kg_key(key_id)
+
+    def get_kg_key(self, key_id: str) -> sqlite3.Row | None:
+        return self._conn.execute(
+            "SELECT * FROM kg_api_keys WHERE id = ?", (key_id,)
+        ).fetchone()
+
+    def list_kg_keys(self) -> list[sqlite3.Row]:
+        return self._conn.execute(
+            "SELECT * FROM kg_api_keys ORDER BY created_at DESC"
+        ).fetchall()
+
+    def find_active_kg_key_by_hash(self, key_hash: str) -> sqlite3.Row | None:
+        return self._conn.execute(
+            "SELECT * FROM kg_api_keys WHERE key_hash = ? AND revoked_at IS NULL",
+            (key_hash,),
+        ).fetchone()
+
+    def revoke_kg_key(self, key_id: str) -> bool:
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "UPDATE kg_api_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL",
+                (_now(), key_id),
+            )
+            if cur.rowcount:
+                return True
+            # Auch schon-widerrufene/existente Keys gelten als 'gefunden'.
+            return self.get_kg_key(key_id) is not None
+
+    def touch_kg_key(self, key_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "UPDATE kg_api_keys SET last_used_at = ? WHERE id = ?",
+                (_now(), key_id),
+            )
+
     # ---- Abfragen -----------------------------------------------------
     def get_airlock(self, code: str) -> sqlite3.Row | None:
         return self._conn.execute(
@@ -208,6 +268,7 @@ class Registry:
         ).fetchone()
 
     def list_airlocks(self, status: str | None = None, batch_id: str | None = None,
+                      available: bool = False,
                       limit: int = 100, offset: int = 0) -> list[sqlite3.Row]:
         q = "SELECT * FROM airlocks WHERE 1=1"
         args: list = []
@@ -215,6 +276,10 @@ class Registry:
             q += " AND status = ?"; args.append(status)
         if batch_id:
             q += " AND batch_id = ?"; args.append(batch_id)
+        if available:
+            # "Verfuegbar" = Tag gebunden und noch frei (nicht in Benutzung/entwertet).
+            q += (" AND nfc_uid IS NOT NULL"
+                  " AND status NOT IN ('active','retired','voided')")
         q += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
         args += [limit, offset]
         return self._conn.execute(q, args).fetchall()

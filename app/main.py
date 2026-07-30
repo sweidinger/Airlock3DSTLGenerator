@@ -2,18 +2,21 @@
 from __future__ import annotations
 
 import json
+import secrets
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from . import kgkeys, kglog
 from . import nfc as nfclib
 from .auth import require_api_key
 from .config import settings
 from .generator import validate_code
-from .models import (AirlockOut, BatchOut, GenerateRequest, NfcCommitRequest,
-                     NfcPrepareRequest, NfcVerifyRequest, StatusUpdate, ThreeMFRequest)
+from .models import (AirlockOut, BatchOut, GenerateRequest, KgKeyCreate,
+                     NfcCommitRequest, NfcPrepareRequest, NfcVerifyRequest,
+                     StatusUpdate, ThreeMFRequest)
 from .registry import STATUSES, CodeExhaustionError
 from .service import AirlockService
 from .updates import read_status, request_update
@@ -39,6 +42,86 @@ def get_service() -> AirlockService:
     if _service is None:
         _service = AirlockService()
     return _service
+
+
+# ---- KG-Tracker-Zugriff (voller Key ODER eingeschraenkter KG-Key) --------
+def _presented_key(x_api_key: str | None, authorization: str | None) -> str | None:
+    if x_api_key:
+        return x_api_key
+    if authorization and authorization.lower().startswith("bearer "):
+        return authorization[7:].strip()
+    return None
+
+
+def _identify_kg(presented: str, svc: AirlockService) -> dict | None:
+    """Ordnet einen praesentierten Key einem KG-Key zu (statisch/ENV oder DB)."""
+    if settings.kg_api_key and secrets.compare_digest(presented, settings.kg_api_key):
+        return {"id": "env", "prefix": "env", "name": "ENV"}
+    if kgkeys.looks_like_kg_key(presented):
+        row = svc.registry.find_active_kg_key_by_hash(kgkeys.hash_key(presented))
+        if row is not None:
+            return {"id": row["id"], "prefix": row["key_prefix"], "name": row["name"]}
+    return None
+
+
+async def require_kg_access(
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    authorization: str | None = Header(default=None),
+    svc: AirlockService = Depends(get_service),
+) -> None:
+    """Erlaubt den vollen Key ODER einen gueltigen KG-Tracker-Key.
+
+    Fuer Lesen, Statuswechsel und NFC-verify. Schreibende/erzeugende Endpoints
+    bleiben auf `require_api_key` (nur voller Key).
+    """
+    presented = _presented_key(x_api_key, authorization)
+    if presented and secrets.compare_digest(presented, settings.api_key):
+        return
+    if presented and _identify_kg(presented, svc) is not None:
+        if not (settings.kg_api_key and secrets.compare_digest(presented, settings.kg_api_key)):
+            info = _identify_kg(presented, svc)
+            if info and info["id"] != "env":
+                svc.registry.touch_kg_key(info["id"])
+        return
+    raise HTTPException(
+        status_code=401,
+        detail="Ungueltiger oder fehlender API-Key.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+@app.middleware("http")
+async def _kg_request_log(request: Request, call_next):
+    """Protokolliert (nur) KG-Key-Anfragen an /v1 im In-Memory-Ringpuffer."""
+    response = await call_next(request)
+    try:
+        path = request.url.path
+        if path.startswith("/v1"):
+            presented = _presented_key(
+                request.headers.get("x-api-key"), request.headers.get("authorization")
+            )
+            if presented and not secrets.compare_digest(presented, settings.api_key):
+                looks = kgkeys.looks_like_kg_key(presented)
+                info = None
+                try:
+                    info = _identify_kg(presented, get_service())
+                except Exception:
+                    info = None
+                if info is not None or looks:
+                    note = response.headers.get("X-Airlock-Note")
+                    if "X-Airlock-Note" in response.headers:
+                        del response.headers["X-Airlock-Note"]
+                    kglog.add(
+                        method=request.method, path=path, status=response.status_code,
+                        key_id=(info or {}).get("id"),
+                        key_prefix=(info or {}).get("prefix") or presented[:12],
+                        key_name=(info or {}).get("name"),
+                        client=(request.client.host if request.client else None),
+                        note=note,
+                    )
+    except Exception:
+        pass
+    return response
 
 
 # ---- Web-Dashboard (ohne Auth; API-Aufrufe darin nutzen den API-Key) ---
@@ -104,16 +187,18 @@ def generate(req: GenerateRequest,
 
 
 @app.get("/v1/airlocks", response_model=list[AirlockOut],
-         dependencies=[Depends(require_api_key)], tags=["airlocks"])
+         dependencies=[Depends(require_kg_access)], tags=["airlocks"])
 def list_airlocks(status: str | None = None, batch_id: str | None = None,
+                  available: bool = Query(False, description="Nur verfuegbare Locks (Tag gebunden, noch frei)"),
                   limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0),
                   svc: AirlockService = Depends(get_service)):
-    rows = svc.registry.list_airlocks(status=status, batch_id=batch_id, limit=limit, offset=offset)
+    rows = svc.registry.list_airlocks(status=status, batch_id=batch_id,
+                                      available=available, limit=limit, offset=offset)
     return [_airlock_row_to_out(r) for r in rows]
 
 
 @app.get("/v1/airlocks/{code}", response_model=AirlockOut,
-         dependencies=[Depends(require_api_key)], tags=["airlocks"])
+         dependencies=[Depends(require_kg_access)], tags=["airlocks"])
 def get_airlock(code: str, svc: AirlockService = Depends(get_service)):
     code = _norm(code)
     r = svc.registry.get_airlock(code)
@@ -135,8 +220,9 @@ def download_stl(code: str, svc: AirlockService = Depends(get_service)):
 
 
 @app.patch("/v1/airlocks/{code}", response_model=AirlockOut,
-           dependencies=[Depends(require_api_key)], tags=["airlocks"])
-def update_status(code: str, upd: StatusUpdate, svc: AirlockService = Depends(get_service)):
+           dependencies=[Depends(require_kg_access)], tags=["airlocks"])
+def update_status(code: str, upd: StatusUpdate, response: Response,
+                  svc: AirlockService = Depends(get_service)):
     code = _norm(code)
     try:
         r = svc.registry.update_status(code, upd.status)
@@ -144,6 +230,7 @@ def update_status(code: str, upd: StatusUpdate, svc: AirlockService = Depends(ge
         raise HTTPException(404, f"Airlock {code} nicht gefunden.")
     except ValueError as e:
         raise HTTPException(422, str(e))
+    response.headers["X-Airlock-Note"] = f"status={upd.status}"
     return _airlock_row_to_out(r)
 
 
@@ -177,26 +264,36 @@ def nfc_commit(code: str, req: NfcCommitRequest, svc: AirlockService = Depends(g
     return _airlock_row_to_out(r)
 
 
-@app.post("/v1/airlocks/{code}/nfc/verify", dependencies=[Depends(require_api_key)], tags=["nfc"])
-def nfc_verify(code: str, req: NfcVerifyRequest, svc: AirlockService = Depends(get_service)):
-    """Für den KG-Tracker: prüft Signatur, UID-Bindung und Status."""
+@app.post("/v1/airlocks/{code}/nfc/verify", dependencies=[Depends(require_kg_access)], tags=["nfc"])
+def nfc_verify(code: str, req: NfcVerifyRequest, response: Response,
+               svc: AirlockService = Depends(get_service)):
+    """Für den KG-Tracker: prüft Signatur, UID-Bindung und (optional) Status."""
     code = _norm(code)
     r = svc.registry.get_airlock(code)
     if r is None:
-        return {"valid": False, "reason": "unknown_code"}
-    try:
-        uid = nfclib.normalize_uid(req.uid)
-    except ValueError:
-        return {"valid": False, "reason": "bad_uid"}
-    if not nfclib.verify(code, uid, req.token, settings.nfc_secret):
-        return {"valid": False, "reason": "bad_signature"}
-    bound = r["nfc_uid"]
-    if bound and bound != uid:
-        return {"valid": False, "reason": "uid_mismatch", "bound_uid": bound}
-    if r["status"] in ("retired", "voided"):
-        return {"valid": False, "reason": f"status_{r['status']}", "status": r["status"]}
-    return {"valid": True, "code": code, "uid": uid, "status": r["status"],
-            "bound_uid": bound}
+        res = {"valid": False, "reason": "unknown_code"}
+    else:
+        try:
+            uid = nfclib.normalize_uid(req.uid)
+        except ValueError:
+            uid = None
+        if uid is None:
+            res = {"valid": False, "reason": "bad_uid"}
+        elif not nfclib.verify(code, uid, req.token, settings.nfc_secret):
+            res = {"valid": False, "reason": "bad_signature"}
+        else:
+            bound = r["nfc_uid"]
+            if bound and bound != uid:
+                res = {"valid": False, "reason": "uid_mismatch", "bound_uid": bound}
+            elif r["status"] in ("retired", "voided"):
+                res = {"valid": False, "reason": f"status_{r['status']}", "status": r["status"]}
+            elif req.require_status and r["status"] != req.require_status:
+                res = {"valid": False, "reason": "status_mismatch", "status": r["status"]}
+            else:
+                res = {"valid": True, "code": code, "uid": uid, "status": r["status"],
+                       "bound_uid": bound}
+    response.headers["X-Airlock-Note"] = f"verify {res.get('valid')} {res.get('reason', 'ok')}"
+    return res
 
 
 # ---- Mehrfarb-Export (Bambu): 3MF / OBJ ------------------------------
@@ -323,6 +420,63 @@ def update_apply():
     if not res.get("requested"):
         raise HTTPException(409, res.get("reason", "Update konnte nicht angefordert werden."))
     return res
+
+
+# ---- KG-Tracker: eingeschraenkte Keys + Zugriffs-Log (nur voller Key) ----
+def _kg_key_public(r) -> dict:
+    return {
+        "id": r["id"], "name": r["name"], "key_prefix": r["key_prefix"],
+        "created_at": r["created_at"], "last_used_at": r["last_used_at"],
+        "revoked_at": r["revoked_at"], "active": r["revoked_at"] is None,
+    }
+
+
+@app.post("/v1/kg/keys", dependencies=[Depends(require_api_key)], tags=["kg"])
+def kg_key_create(req: KgKeyCreate, svc: AirlockService = Depends(get_service)):
+    raw, key_hash, prefix = kgkeys.new_key()
+    row = svc.registry.create_kg_key(kgkeys.new_id(), req.name, key_hash, prefix)
+    out = _kg_key_public(row)
+    out["key"] = raw  # nur EINMAL im Klartext
+    out["note"] = "Dieser Key wird nur einmal angezeigt – jetzt kopieren."
+    return out
+
+
+@app.get("/v1/kg/keys", dependencies=[Depends(require_api_key)], tags=["kg"])
+def kg_key_list(svc: AirlockService = Depends(get_service)):
+    return [_kg_key_public(r) for r in svc.registry.list_kg_keys()]
+
+
+@app.post("/v1/kg/keys/{key_id}/revoke", dependencies=[Depends(require_api_key)], tags=["kg"])
+def kg_key_revoke(key_id: str, svc: AirlockService = Depends(get_service)):
+    if not svc.registry.revoke_kg_key(key_id):
+        raise HTTPException(404, "KG-Key nicht gefunden.")
+    return {"ok": True, "id": key_id}
+
+
+@app.post("/v1/kg/keys/{key_id}/regenerate", dependencies=[Depends(require_api_key)], tags=["kg"])
+def kg_key_regenerate(key_id: str, svc: AirlockService = Depends(get_service)):
+    old = svc.registry.get_kg_key(key_id)
+    if old is None:
+        raise HTTPException(404, "KG-Key nicht gefunden.")
+    svc.registry.revoke_kg_key(key_id)
+    raw, key_hash, prefix = kgkeys.new_key()
+    row = svc.registry.create_kg_key(kgkeys.new_id(), old["name"], key_hash, prefix)
+    out = _kg_key_public(row)
+    out["key"] = raw
+    out["replaced"] = key_id
+    out["note"] = "Neuer Key – nur einmal sichtbar. Der bisherige ist ungueltig."
+    return out
+
+
+@app.get("/v1/kg/log", dependencies=[Depends(require_api_key)], tags=["kg"])
+def kg_log(limit: int = Query(200, ge=1, le=kglog.MAX_ENTRIES)):
+    return {"entries": kglog.entries(limit), "max": kglog.MAX_ENTRIES}
+
+
+@app.post("/v1/kg/log:clear", dependencies=[Depends(require_api_key)], tags=["kg"])
+def kg_log_clear():
+    kglog.clear()
+    return {"ok": True}
 
 
 # ---- Helpers ----------------------------------------------------------
