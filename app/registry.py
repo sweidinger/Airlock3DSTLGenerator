@@ -91,6 +91,11 @@ class Registry:
                     revoked_at   TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_kgkeys_hash ON kg_api_keys(key_hash);
+                CREATE TABLE IF NOT EXISTS app_kv (
+                    key        TEXT PRIMARY KEY,
+                    value      TEXT,
+                    updated_at TEXT
+                );
                 """
             )
 
@@ -255,6 +260,33 @@ class Registry:
                 "UPDATE kg_api_keys SET last_used_at = ? WHERE id = ?",
                 (_now(), key_id),
             )
+
+    # ---- App-Key-Value (z. B. NFC-Secret) -----------------------------
+    def get_kv(self, key: str) -> str | None:
+        row = self._conn.execute(
+            "SELECT value FROM app_kv WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else None
+
+    def get_kv_updated(self, key: str) -> str | None:
+        row = self._conn.execute(
+            "SELECT updated_at FROM app_kv WHERE key = ?", (key,)
+        ).fetchone()
+        return row["updated_at"] if row else None
+
+    def set_kv(self, key: str, value: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO app_kv(key,value,updated_at) VALUES(?,?,?)"
+                " ON CONFLICT(key) DO UPDATE SET value=excluded.value,"
+                " updated_at=excluded.updated_at",
+                (key, value, _now()),
+            )
+
+    def count_nfc_bound(self) -> int:
+        return self._conn.execute(
+            "SELECT COUNT(*) FROM airlocks WHERE nfc_uid IS NOT NULL"
+        ).fetchone()[0]
 
     # ---- Abfragen -----------------------------------------------------
     def get_airlock(self, code: str) -> sqlite3.Row | None:

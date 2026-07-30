@@ -7,6 +7,7 @@ import uuid
 import zipfile
 from pathlib import Path
 
+from . import nfc as nfclib
 from .config import settings
 from .generator import Generator, validate_code
 from .registry import Registry
@@ -18,6 +19,43 @@ class AirlockService:
         self.cfg = settings
         self.registry = registry or Registry(settings.db_path, settings.code_length)
         self.generator = generator or Generator()
+
+    # ---- NFC-Secret: ENV-Override > DB > Default ----------------------
+    def effective_nfc_secret(self) -> str:
+        """Das tatsaechlich verwendete NFC-Secret.
+
+        Reihenfolge: gesetzte ENV `AIRLOCK_NFC_SECRET` (Override) > in der DB
+        hinterlegtes Secret > Default. So kann das Secret im Dashboard verwaltet
+        werden, ohne eine bestehende ENV-Konfiguration zu entwerten.
+        """
+        env = settings.nfc_secret
+        if env and not nfclib.secret_is_default(env):
+            return env
+        db = self.registry.get_kv("nfc_secret")
+        if db:
+            return db
+        return env
+
+    def nfc_secret_status(self) -> dict:
+        env = settings.nfc_secret
+        env_set = bool(env) and not nfclib.secret_is_default(env)
+        db = self.registry.get_kv("nfc_secret")
+        if env_set:
+            source = "env"
+        elif db:
+            source = "db"
+        else:
+            source = "default"
+        return {
+            "configured": env_set or bool(db),
+            "source": source,
+            "env_override": env_set,
+            "updated_at": self.registry.get_kv_updated("nfc_secret"),
+            "bound_tags": self.registry.count_nfc_bound(),
+        }
+
+    def set_nfc_secret(self, secret: str) -> None:
+        self.registry.set_kv("nfc_secret", secret)
 
     def _new_batch_id(self) -> str:
         return "b_" + uuid.uuid4().hex[:10]
