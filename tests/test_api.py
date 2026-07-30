@@ -221,6 +221,46 @@ def test_threemf_export():
                        json={"batch_id": b["batch_id"], "format": "stl"}, headers=AUTH).status_code == 422
 
 
+def test_nfc_tag_binding():
+    b = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()
+    code = b["airlocks"][0]["code"]
+    uid = "04:11:22:33:44:55:80"
+
+    p = client.post(f"/v1/airlocks/{code}/nfc/prepare", json={"uid": uid}, headers=AUTH)
+    assert p.status_code == 200, p.text
+    pj = p.json()
+    assert pj["uid"] == "04112233445580"          # normalisiert (Hex, ohne Trenner)
+    assert pj["ndef_text"].startswith("AL1|")
+    token = pj["token"]
+
+    # binden
+    cm = client.post(f"/v1/airlocks/{code}/nfc/commit", json={"uid": uid}, headers=AUTH)
+    assert cm.status_code == 200 and cm.json()["nfc_uid"] == "04112233445580"
+
+    # gültige Verifikation
+    v = client.post(f"/v1/airlocks/{code}/nfc/verify",
+                    json={"uid": uid, "token": token}, headers=AUTH).json()
+    assert v["valid"] is True
+
+    # falscher Token
+    bad = client.post(f"/v1/airlocks/{code}/nfc/verify",
+                      json={"uid": uid, "token": "00" * 16}, headers=AUTH).json()
+    assert bad["valid"] is False and bad["reason"] == "bad_signature"
+
+    # fremde UID (Klon mit neuem Tag) -> abgelehnt
+    clone = client.post(f"/v1/airlocks/{code}/nfc/verify",
+                        json={"uid": "04:99:99:99:99:99:80", "token": token}, headers=AUTH).json()
+    assert clone["valid"] is False
+
+    # dieselbe UID an einen anderen Code binden -> Konflikt
+    b2 = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()
+    code2 = b2["airlocks"][0]["code"]
+    assert client.post(f"/v1/airlocks/{code2}/nfc/commit", json={"uid": uid}, headers=AUTH).status_code == 409
+
+    # Auth
+    assert client.post(f"/v1/airlocks/{code}/nfc/prepare", json={"uid": uid}).status_code == 401
+
+
 def test_config_masks_key():
     c = client.get("/v1/config", headers=AUTH)
     assert c.status_code == 200

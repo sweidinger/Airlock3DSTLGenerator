@@ -139,6 +139,32 @@
   </div>
 </div>
 
+<div class="modal" id="nfcModal">
+  <div class="box" style="width:min(560px,94vw);height:auto;max-height:92vh">
+    <div class="bar">
+      <h3 id="nfcTitle">NFC-Tag</h3>
+      <button class="secondary" style="margin-left:auto" onclick="closeNfc()">Schließen</button>
+    </div>
+    <div style="padding:16px;display:grid;gap:14px">
+      <div id="nfcState" class="hint"></div>
+      <div id="nfcWebRow" class="row">
+        <button id="nfcWebBtn">Mit Web NFC schreiben</button>
+        <small class="hint">Tag ans Gerät halten (Android + Chrome, HTTPS)</small>
+      </div>
+      <div style="border-top:1px solid var(--line);padding-top:12px;display:grid;gap:8px">
+        <div class="hint">Fallback (iPhone / eigenes NFC-Tool):</div>
+        <div class="row"><label class="muted" style="width:52px">UID</label>
+          <input id="nfcUid" class="mono" placeholder="Tag-UID (Hex), z. B. 04A1B2C3D4E580" style="flex:1;min-width:180px"></div>
+        <div class="row"><button class="secondary" id="nfcPrepBtn">Payload erzeugen</button></div>
+        <div class="row"><label class="muted" style="width:52px">NDEF</label>
+          <input id="nfcNdef" class="mono" readonly placeholder="—" style="flex:1;min-width:180px">
+          <button class="secondary" id="nfcCopy">Kopieren</button></div>
+        <div class="row"><button id="nfcCommitBtn" disabled>Als geschrieben bestätigen</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script type="importmap">
 { "imports": { "three": "/static/vendor/three.module.js" } }
 </script>

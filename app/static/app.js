@@ -63,6 +63,48 @@ function selectedCodes(){ return Array.from(document.querySelectorAll('.tmfChk:c
 function updateTmfSel(){ const n=selectedCodes().length; $('#tmfSelCount').textContent = n?(n+' markiert'):'';
   const b=$('#tmfSelBtn'); if(b) b.disabled = n===0; }
 
+// ---- NFC-Tag (signierter Token gebunden an Tag-UID) ----
+let _nfcCode=null, _nfcBusy=false;
+function closeNfc(){ $('#nfcModal').style.display='none'; }
+window.closeNfc=closeNfc;
+function openNfcModal(code, boundUid){
+  _nfcCode=code;
+  $('#nfcTitle').textContent='NFC-Tag · '+code;
+  $('#nfcUid').value=''; $('#nfcNdef').value=''; $('#nfcCommitBtn').disabled=true;
+  const web = ('NDEFReader' in window);
+  $('#nfcWebRow').style.display = web?'':'none';
+  let s = boundUid ? `Gebunden an UID <span class="mono">${boundUid}</span> — erneutes Schreiben überschreibt die Bindung.`
+                   : 'Noch kein Tag gebunden.';
+  if(!web) s += ' <span class="err">Web NFC hier nicht verfügbar — Fallback nutzen.</span>';
+  $('#nfcState').innerHTML = s;
+  $('#nfcModal').style.display='flex';
+}
+async function nfcPrepare(uid){ return api(`/v1/airlocks/${_nfcCode}/nfc/prepare`,{method:'POST',body:{uid}}); }
+async function nfcCommit(uid){ return api(`/v1/airlocks/${_nfcCode}/nfc/commit`,{method:'POST',body:{uid}}); }
+async function nfcWebWrite(){
+  if(!('NDEFReader' in window)){ toast('Web NFC nicht verfügbar','err'); return; }
+  try{
+    const reader = new NDEFReader();
+    $('#nfcState').textContent='Tag ans Gerät halten…';
+    await reader.scan();
+    reader.onreadingerror = ()=>toast('Tag nicht lesbar','err');
+    reader.onreading = async (ev)=>{
+      if(_nfcBusy) return; _nfcBusy=true;
+      try{
+        const uid = ev.serialNumber;
+        if(!uid){ toast('Keine UID vom Tag','err'); return; }
+        const p = await nfcPrepare(uid);
+        if(!p.secret_configured) toast('Warnung: NFC-Secret ist noch Default!','err');
+        await reader.write({records:[{recordType:'text', data:p.ndef_text, lang:'de'}]});
+        await nfcCommit(p.uid);
+        toast('Tag geschrieben & gebunden ✓ ('+p.uid+')','ok');
+        closeNfc(); refreshAirlocks();
+      }catch(e){ toast('Schreiben fehlgeschlagen: '+e.message,'err'); }
+      finally{ _nfcBusy=false; }
+    };
+  }catch(e){ toast('Web-NFC-Fehler: '+e.message,'err'); }
+}
+
 function pill(status){
   const c = STATUS_COLORS[status]||'var(--muted)';
   return `<span class="pill" style="background:${c}">${status}</span>`;
@@ -129,6 +171,7 @@ async function refreshAirlocks(){
         <td class="row" style="gap:6px">
           <button class="secondary view" data-path="/v1/airlocks/${r.code}/stl" data-title="${r.code}">3D</button>
           <button class="secondary dl" data-path="/v1/airlocks/${r.code}/stl" data-file="${r.template||'lock'}_${r.code}.stl">STL</button>
+          <button class="secondary nfc" data-code="${r.code}" data-uid="${r.nfc_uid||''}" title="${r.nfc_uid?('Tag gebunden: '+r.nfc_uid):'NFC-Tag beschreiben'}">${r.nfc_uid?'NFC ✓':'NFC'}</button>
         </td>
       </tr>`;}).join('') : `<tr><td colspan="7" class="muted">keine Einträge</td></tr>`;
     bindRowActions();
@@ -157,6 +200,7 @@ function bindRowActions(){
   document.querySelectorAll('.dl').forEach(b=>b.onclick=()=>download(b.dataset.path,b.dataset.file));
   document.querySelectorAll('.view').forEach(b=>b.onclick=()=>viewSTL(b.dataset.path,b.dataset.title));
   document.querySelectorAll('.tmf').forEach(b=>b.onclick=()=>threemfExport({batch_id:b.dataset.batch}, b));
+  document.querySelectorAll('.nfc').forEach(b=>b.onclick=()=>openNfcModal(b.dataset.code, b.dataset.uid));
   document.querySelectorAll('.statusSel').forEach(sel=>sel.onchange=async()=>{
     try{ await api('/v1/airlocks/'+sel.dataset.code,{method:'PATCH',body:{status:sel.value}});
       toast('Status → '+sel.value,'ok'); refreshStats(); }
@@ -277,6 +321,18 @@ $('#tmfAll').onclick = ()=>{ const on=$('#tmfAll').checked;
   document.querySelectorAll('.tmfChk').forEach(c=>c.checked=on); updateTmfSel(); };
 $('#reloadUpdates').onclick = refreshUpdates;
 $('#applyUpdateBtn').onclick = applyUpdate;
+$('#nfcWebBtn').onclick = nfcWebWrite;
+$('#nfcPrepBtn').onclick = async ()=>{ const uid=$('#nfcUid').value.trim();
+  if(!uid){ toast('Tag-UID eingeben','err'); return; }
+  try{ const p=await nfcPrepare(uid); $('#nfcNdef').value=p.ndef_text; $('#nfcCommitBtn').disabled=false;
+    if(!p.secret_configured) toast('Warnung: NFC-Secret ist noch Default!','err');
+    else toast('Payload erzeugt — auf den Tag schreiben, dann bestätigen','ok');
+  }catch(e){ toast('Fehler: '+e.message,'err'); } };
+$('#nfcCopy').onclick = ()=>{ const t=$('#nfcNdef').value;
+  if(t && navigator.clipboard){ navigator.clipboard.writeText(t); toast('Kopiert','ok'); } };
+$('#nfcCommitBtn').onclick = async ()=>{ const uid=$('#nfcUid').value.trim();
+  try{ await nfcCommit(uid); toast('Tag gebunden ✓','ok'); closeNfc(); refreshAirlocks(); }
+  catch(e){ toast('Fehler: '+e.message,'err'); } };
 $('#navDashboard').onclick = ()=>showView('dashboard');
 $('#navUpdates').onclick = ()=>showView('updates');
 $('#filterStatus').onchange = refreshAirlocks;

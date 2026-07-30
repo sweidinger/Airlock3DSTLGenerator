@@ -8,10 +8,12 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from . import nfc as nfclib
 from .auth import require_api_key
 from .config import settings
 from .generator import validate_code
-from .models import AirlockOut, BatchOut, GenerateRequest, StatusUpdate, ThreeMFRequest
+from .models import (AirlockOut, BatchOut, GenerateRequest, NfcCommitRequest,
+                     NfcPrepareRequest, NfcVerifyRequest, StatusUpdate, ThreeMFRequest)
 from .registry import STATUSES, CodeExhaustionError
 from .service import AirlockService
 from .updates import read_status, request_update
@@ -143,6 +145,58 @@ def update_status(code: str, upd: StatusUpdate, svc: AirlockService = Depends(ge
     except ValueError as e:
         raise HTTPException(422, str(e))
     return _airlock_row_to_out(r)
+
+
+# ---- NFC-Tag (signierter Token gebunden an Tag-UID) ------------------
+@app.post("/v1/airlocks/{code}/nfc/prepare", dependencies=[Depends(require_api_key)], tags=["nfc"])
+def nfc_prepare(code: str, req: NfcPrepareRequest, svc: AirlockService = Depends(get_service)):
+    code = _norm(code)
+    if svc.registry.get_airlock(code) is None:
+        raise HTTPException(404, f"Airlock {code} nicht gefunden.")
+    try:
+        payload = nfclib.make_payload(code, req.uid, settings.nfc_secret)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    payload["secret_configured"] = not nfclib.secret_is_default(settings.nfc_secret)
+    return payload
+
+
+@app.post("/v1/airlocks/{code}/nfc/commit", dependencies=[Depends(require_api_key)], tags=["nfc"])
+def nfc_commit(code: str, req: NfcCommitRequest, svc: AirlockService = Depends(get_service)):
+    code = _norm(code)
+    try:
+        uid = nfclib.normalize_uid(req.uid)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    try:
+        r = svc.registry.set_nfc(code, uid)
+    except KeyError:
+        raise HTTPException(404, f"Airlock {code} nicht gefunden.")
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return _airlock_row_to_out(r)
+
+
+@app.post("/v1/airlocks/{code}/nfc/verify", dependencies=[Depends(require_api_key)], tags=["nfc"])
+def nfc_verify(code: str, req: NfcVerifyRequest, svc: AirlockService = Depends(get_service)):
+    """Für den KG-Tracker: prüft Signatur, UID-Bindung und Status."""
+    code = _norm(code)
+    r = svc.registry.get_airlock(code)
+    if r is None:
+        return {"valid": False, "reason": "unknown_code"}
+    try:
+        uid = nfclib.normalize_uid(req.uid)
+    except ValueError:
+        return {"valid": False, "reason": "bad_uid"}
+    if not nfclib.verify(code, uid, req.token, settings.nfc_secret):
+        return {"valid": False, "reason": "bad_signature"}
+    bound = r["nfc_uid"]
+    if bound and bound != uid:
+        return {"valid": False, "reason": "uid_mismatch", "bound_uid": bound}
+    if r["status"] in ("retired", "voided"):
+        return {"valid": False, "reason": f"status_{r['status']}", "status": r["status"]}
+    return {"valid": True, "code": code, "uid": uid, "status": r["status"],
+            "bound_uid": bound}
 
 
 # ---- Mehrfarb-Export (Bambu): 3MF / OBJ ------------------------------
@@ -280,8 +334,11 @@ def _norm(code: str) -> str:
 
 
 def _airlock_row_to_out(r) -> dict:
+    keys = r.keys()
     return {
         "code": r["code"], "status": r["status"], "source": r["source"],
         "batch_id": r["batch_id"], "stl_sha256": r["stl_sha256"],
         "stl_url": f"/v1/airlocks/{r['code']}/stl", "created_at": r["created_at"],
+        "nfc_uid": (r["nfc_uid"] if "nfc_uid" in keys else None),
+        "nfc_written_at": (r["nfc_written_at"] if "nfc_written_at" in keys else None),
     }
