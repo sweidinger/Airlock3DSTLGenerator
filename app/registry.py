@@ -91,6 +91,16 @@ class Registry:
                     revoked_at   TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_kgkeys_hash ON kg_api_keys(key_hash);
+                CREATE TABLE IF NOT EXISTS writer_api_keys (
+                    id           TEXT PRIMARY KEY,
+                    name         TEXT NOT NULL,
+                    key_hash     TEXT NOT NULL UNIQUE,
+                    key_prefix   TEXT NOT NULL,
+                    created_at   TEXT NOT NULL,
+                    last_used_at TEXT,
+                    revoked_at   TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_wrkeys_hash ON writer_api_keys(key_hash);
                 CREATE TABLE IF NOT EXISTS app_kv (
                     key        TEXT PRIMARY KEY,
                     value      TEXT,
@@ -258,6 +268,51 @@ class Registry:
         with self._lock, self._conn:
             self._conn.execute(
                 "UPDATE kg_api_keys SET last_used_at = ? WHERE id = ?",
+                (_now(), key_id),
+            )
+
+    # ---- Writer-API-Keys (native NFC-Writer-App) ----------------------
+    def create_writer_key(self, key_id: str, name: str, key_hash: str,
+                          key_prefix: str) -> sqlite3.Row:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO writer_api_keys(id,name,key_hash,key_prefix,created_at)"
+                " VALUES(?,?,?,?,?)",
+                (key_id, name, key_hash, key_prefix, _now()),
+            )
+        return self.get_writer_key(key_id)
+
+    def get_writer_key(self, key_id: str) -> sqlite3.Row | None:
+        return self._conn.execute(
+            "SELECT * FROM writer_api_keys WHERE id = ?", (key_id,)
+        ).fetchone()
+
+    def list_writer_keys(self) -> list[sqlite3.Row]:
+        return self._conn.execute(
+            "SELECT * FROM writer_api_keys ORDER BY created_at DESC"
+        ).fetchall()
+
+    def find_active_writer_key_by_hash(self, key_hash: str) -> sqlite3.Row | None:
+        return self._conn.execute(
+            "SELECT * FROM writer_api_keys WHERE key_hash = ? AND revoked_at IS NULL",
+            (key_hash,),
+        ).fetchone()
+
+    def revoke_writer_key(self, key_id: str) -> bool:
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "UPDATE writer_api_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL",
+                (_now(), key_id),
+            )
+            if cur.rowcount:
+                return True
+            # Auch schon-widerrufene/existente Keys gelten als 'gefunden'.
+            return self.get_writer_key(key_id) is not None
+
+    def touch_writer_key(self, key_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "UPDATE writer_api_keys SET last_used_at = ? WHERE id = ?",
                 (_now(), key_id),
             )
 
