@@ -9,13 +9,14 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import kgkeys, kglog
+from . import kgkeys, kglog, secretbackup
 from . import nfc as nfclib
 from .auth import require_api_key
 from .config import settings
 from .generator import validate_code
 from .models import (AirlockOut, BatchOut, GenerateRequest, KgKeyCreate,
-                     NfcCommitRequest, NfcPrepareRequest, NfcVerifyRequest,
+                     NfcCommitRequest, NfcPrepareRequest, NfcSecretBackupRequest,
+                     NfcSecretGenerate, NfcSecretRestoreRequest, NfcVerifyRequest,
                      StatusUpdate, ThreeMFRequest)
 from .registry import STATUSES, CodeExhaustionError
 from .service import AirlockService
@@ -240,11 +241,12 @@ def nfc_prepare(code: str, req: NfcPrepareRequest, svc: AirlockService = Depends
     code = _norm(code)
     if svc.registry.get_airlock(code) is None:
         raise HTTPException(404, f"Airlock {code} nicht gefunden.")
+    secret = svc.effective_nfc_secret()
     try:
-        payload = nfclib.make_payload(code, req.uid, settings.nfc_secret)
+        payload = nfclib.make_payload(code, req.uid, secret)
     except ValueError as e:
         raise HTTPException(422, str(e))
-    payload["secret_configured"] = not nfclib.secret_is_default(settings.nfc_secret)
+    payload["secret_configured"] = not nfclib.secret_is_default(secret)
     return payload
 
 
@@ -279,7 +281,7 @@ def nfc_verify(code: str, req: NfcVerifyRequest, response: Response,
             uid = None
         if uid is None:
             res = {"valid": False, "reason": "bad_uid"}
-        elif not nfclib.verify(code, uid, req.token, settings.nfc_secret):
+        elif not nfclib.verify(code, uid, req.token, svc.effective_nfc_secret()):
             res = {"valid": False, "reason": "bad_signature"}
         else:
             bound = r["nfc_uid"]
@@ -477,6 +479,57 @@ def kg_log(limit: int = Query(200, ge=1, le=kglog.MAX_ENTRIES)):
 def kg_log_clear():
     kglog.clear()
     return {"ok": True}
+
+
+# ---- NFC-Secret verwalten (voller Key) -------------------------------
+@app.get("/v1/nfc/secret/status", dependencies=[Depends(require_api_key)], tags=["nfc"])
+def nfc_secret_status(svc: AirlockService = Depends(get_service)):
+    return svc.nfc_secret_status()
+
+
+@app.post("/v1/nfc/secret/generate", dependencies=[Depends(require_api_key)], tags=["nfc"])
+def nfc_secret_generate(req: NfcSecretGenerate, svc: AirlockService = Depends(get_service)):
+    st = svc.nfc_secret_status()
+    if st["env_override"]:
+        raise HTTPException(409, "AIRLOCK_NFC_SECRET ist per ENV gesetzt und hat "
+                                 "Vorrang – DB-Verwaltung ist deaktiviert.")
+    if not req.confirm:
+        raise HTTPException(400, "Bestaetigung erforderlich (confirm=true): Ein neues "
+                                 "Secret macht ALLE bereits beschriebenen Tags ungueltig.")
+    secret = secrets.token_hex(32)  # 256 Bit
+    svc.set_nfc_secret(secret)
+    out = svc.nfc_secret_status()
+    out["secret"] = secret  # nur EINMAL im Klartext
+    out["note"] = "Secret wird nur einmal angezeigt – jetzt sichern (Backup exportieren)."
+    return out
+
+
+@app.post("/v1/nfc/secret/backup", dependencies=[Depends(require_api_key)], tags=["nfc"])
+def nfc_secret_backup(req: NfcSecretBackupRequest, svc: AirlockService = Depends(get_service)):
+    secret = svc.effective_nfc_secret()
+    if nfclib.secret_is_default(secret):
+        raise HTTPException(409, "Kein echtes Secret gesetzt – zuerst erzeugen.")
+    try:
+        blob = secretbackup.export_backup(secret, req.password)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return {"filename": "airlock-nfc-secret.backup.json", "backup": blob}
+
+
+@app.post("/v1/nfc/secret/restore", dependencies=[Depends(require_api_key)], tags=["nfc"])
+def nfc_secret_restore(req: NfcSecretRestoreRequest, svc: AirlockService = Depends(get_service)):
+    if svc.nfc_secret_status()["env_override"]:
+        raise HTTPException(409, "AIRLOCK_NFC_SECRET ist per ENV gesetzt – "
+                                 "DB-Verwaltung ist deaktiviert.")
+    if not req.confirm:
+        raise HTTPException(400, "Bestaetigung erforderlich (confirm=true): Das ersetzt "
+                                 "das aktuelle Secret.")
+    try:
+        secret = secretbackup.import_backup(req.backup, req.password)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    svc.set_nfc_secret(secret)
+    return svc.nfc_secret_status()
 
 
 # ---- Helpers ----------------------------------------------------------
