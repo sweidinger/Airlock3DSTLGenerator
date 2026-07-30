@@ -32,8 +32,15 @@ AL1|<code>|<token>
   (128 Bit). Kleinschreibung.
 - `UID` — Tag-UID als Hex, **Großbuchstaben, ohne Trenner** (z. B. `04A1B2C3D4E580`).
 
-Das Geheimnis `secret` ist `AIRLOCK_NFC_SECRET` (Env). Es muss im Generator UND
-– falls offline verifiziert wird – im KG-Tracker identisch gesetzt sein.
+Das Geheimnis `secret` wird im **Dashboard → „KG-Tracker" → NFC-Secret** verwaltet
+(erzeugen, verschlüsseltes Backup exportieren/wiederherstellen; in der DB
+gespeichert). Alternativ per `AIRLOCK_NFC_SECRET` (Env) setzen — eine gesetzte
+Env-Variable hat **Vorrang** vor dem DB-Wert. Ein neues Secret macht alle bereits
+beschriebenen Tags ungültig, daher: einmal setzen, Backup sichern, nicht rotieren.
+
+API (voller Key): `GET /v1/nfc/secret/status`, `POST /v1/nfc/secret/generate`
+(`{confirm:true}`), `…/backup` (`{password}`), `…/restore`
+(`{password,backup,confirm}`).
 
 ## API (Generator)
 

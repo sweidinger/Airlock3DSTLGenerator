@@ -93,6 +93,23 @@ class KgKeyCreate(BaseModel):
                       description="Anzeigename zur Wiedererkennung")
 
 
+class NfcSecretGenerate(BaseModel):
+    """Erzeugt/rotiert das NFC-Secret (macht bestehende Tags ungueltig!)."""
+    confirm: bool = Field(default=False, description="Muss true sein (Bestaetigung).")
+
+
+class NfcSecretBackupRequest(BaseModel):
+    """Verschluesseltes Backup des aktuellen NFC-Secrets exportieren."""
+    password: str = Field(min_length=1, description="Passwort zum Schutz der Backup-Datei")
+
+
+class NfcSecretRestoreRequest(BaseModel):
+    """Secret aus einem verschluesselten Backup wiederherstellen."""
+    password: str = Field(min_length=1)
+    backup: str = Field(min_length=1, description="Inhalt der Backup-Datei")
+    confirm: bool = Field(default=False, description="Muss true sein (Bestaetigung).")
+
+
 class StatusUpdate(BaseModel):
     status: str
 
