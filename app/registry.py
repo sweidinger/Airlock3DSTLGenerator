@@ -69,6 +69,15 @@ class Registry:
                 CREATE INDEX IF NOT EXISTS idx_airlocks_status ON airlocks(status);
                 """
             )
+            # Migration: NFC-Spalten nachrüsten, falls DB älter ist.
+            cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(airlocks)")}
+            if "nfc_uid" not in cols:
+                self._conn.execute("ALTER TABLE airlocks ADD COLUMN nfc_uid TEXT")
+            if "nfc_written_at" not in cols:
+                self._conn.execute("ALTER TABLE airlocks ADD COLUMN nfc_written_at TEXT")
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_airlocks_nfcuid ON airlocks(nfc_uid)"
+            )
 
     # ---- Code-Vergabe -------------------------------------------------
     def _exists(self, code: str) -> bool:
@@ -160,6 +169,31 @@ class Registry:
             )
             if cur.rowcount == 0:
                 raise KeyError(code)
+        return self.get_airlock(code)
+
+    # ---- NFC ----------------------------------------------------------
+    def get_by_nfc_uid(self, uid: str) -> sqlite3.Row | None:
+        return self._conn.execute(
+            "SELECT * FROM airlocks WHERE nfc_uid = ?", (uid,)
+        ).fetchone()
+
+    def set_nfc(self, code: str, uid: str) -> sqlite3.Row:
+        """Bindet eine Tag-UID an einen Code. Fehler bei Konflikt/Unbekannt."""
+        with self._lock, self._conn:
+            row = self._conn.execute(
+                "SELECT code FROM airlocks WHERE code=?", (code,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(code)
+            other = self._conn.execute(
+                "SELECT code FROM airlocks WHERE nfc_uid=? AND code<>?", (uid, code)
+            ).fetchone()
+            if other is not None:
+                raise ValueError(f"Tag-UID bereits an Code {other['code']} gebunden.")
+            self._conn.execute(
+                "UPDATE airlocks SET nfc_uid=?, nfc_written_at=? WHERE code=?",
+                (uid, _now(), code),
+            )
         return self.get_airlock(code)
 
     # ---- Abfragen -----------------------------------------------------

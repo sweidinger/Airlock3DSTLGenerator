@@ -69,6 +69,10 @@ class Settings:
     threemf_color_body: str = os.environ.get("AIRLOCK_3MF_COLOR_BODY", "#000000")
     threemf_color_code: str = os.environ.get("AIRLOCK_3MF_COLOR_CODE", "#FFFFFF")
 
+    # NFC-Signierung: Geheimnis für HMAC(Code|UID). MUSS im Betrieb gesetzt sein
+    # (dasselbe Secret braucht später der KG-Tracker zum Offline-Verifizieren).
+    nfc_secret: str = os.environ.get("AIRLOCK_NFC_SECRET", "change-me-nfc-secret")
+
     profile: TemplateProfile = field(default_factory=TemplateProfile)
 
     @property

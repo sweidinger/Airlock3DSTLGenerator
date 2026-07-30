@@ -3,6 +3,21 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.5.0] - 2026-07-30
+### Hinzugefügt
+- NFC-Tag-Unterstützung als Echtheits-/Kopierschutz: pro Lock wird ein signierter
+  Token (`HMAC(secret, Code|Tag-UID)`) erzeugt und die eindeutige Tag-UID in der
+  Registry gebunden. Ein Nachdruck hätte eine andere UID → fällt auf; ohne das
+  Secret lässt sich kein gültiger Token fälschen.
+- API: `POST /v1/airlocks/{code}/nfc/prepare` (Payload erzeugen),
+  `…/nfc/commit` (UID binden), `…/nfc/verify` (für den KG-Tracker).
+- Dashboard: NFC-Button je Airlock — Schreiben per **Web NFC** (Android/Chrome,
+  HTTPS) oder Fallback (UID eingeben, Payload mit eigenem Tool schreiben,
+  bestätigen). Tag-Status wird in der Tabelle angezeigt.
+- Optionaler HTTPS-Reverse-Proxy (Caddy, `docker-compose.proxy.yml`) als
+  Voraussetzung für Web NFC; `AIRLOCK_NFC_SECRET` in `.env.example`;
+  Spezifikation in `docs/NFC.md` (inkl. Verifikation für den KG-Tracker).
+
 ## [1.4.0] - 2026-07-30
 ### Hinzugefügt
 - Mehrfarb-Export als **OBJ** (Per-Vertex-Farbe) zusätzlich zum 3MF. Format wird

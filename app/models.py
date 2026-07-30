@@ -30,6 +30,8 @@ class AirlockOut(BaseModel):
     stl_url: Optional[str] = None
     stl_sha256: Optional[str] = None
     created_at: Optional[str] = None
+    nfc_uid: Optional[str] = None
+    nfc_written_at: Optional[str] = None
 
 
 class BatchOut(BaseModel):
@@ -63,6 +65,22 @@ class ThreeMFRequest(BaseModel):
         if bool(self.codes) == bool(self.batch_id):
             raise ValueError("Genau eines von 'codes' oder 'batch_id' angeben.")
         return self
+
+
+class NfcPrepareRequest(BaseModel):
+    """UID des (leeren) Tags, für den ein signierter Payload erzeugt werden soll."""
+    uid: str = Field(description="Tag-UID (Hex), z. B. vom Reader gelesen")
+
+
+class NfcCommitRequest(BaseModel):
+    """Bestätigt, dass der Tag mit dieser UID beschrieben wurde."""
+    uid: str = Field(description="Tag-UID (Hex)")
+
+
+class NfcVerifyRequest(BaseModel):
+    """Verifikation durch den KG-Tracker: UID + Token vom gelesenen Tag."""
+    uid: str = Field(description="Tag-UID (Hex)")
+    token: str = Field(description="Token aus dem NDEF-Record")
 
 
 class StatusUpdate(BaseModel):
