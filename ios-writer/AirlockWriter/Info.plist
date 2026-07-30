@@ -32,5 +32,9 @@
 	<!-- Pflicht fuer Core NFC: Begruendung fuer den NFC-Zugriff (wird beim Scan gezeigt). -->
 	<key>NFCReaderUsageDescription</key>
 	<string>Zum Beschreiben der Airlock-NFC-Tags.</string>
+
+	<!-- Export-Compliance: App nutzt nur Standard-HTTPS (exempt) -> kein Prompt beim Upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
