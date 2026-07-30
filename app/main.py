@@ -46,6 +46,9 @@ def dashboard():
     if not index.is_file():
         raise HTTPException(404, "Dashboard nicht gefunden.")
     html = index.read_text(encoding="utf-8")
+    # Cache-Busting: Asset-URLs mit der aktuellen Version versehen, damit der
+    # Browser nach einem Update garantiert die neuen /static-Dateien lädt.
+    html = html.replace("__ASSETVER__", APP_VERSION)
     # Optional: API-Key ins Dashboard injizieren (AIRLOCK_UI_AUTOKEY=1).
     # Achtung: Key ist dann im Seitenquelltext sichtbar -> nur im vertrauten LAN.
     if settings.ui_autokey:

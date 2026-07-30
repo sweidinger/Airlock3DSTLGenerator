@@ -104,6 +104,10 @@ def test_viewer_assets_and_markup():
     assert "viewerModal" in html
     assert "/static/app.js" in html          # Gerüst verweist auf app.js
     assert "openSTLViewer" in client.get("/static/viewer.js").text
+    # Cache-Busting: Asset-URLs tragen die Version, kein Platzhalter bleibt übrig
+    assert "__ASSETVER__" not in html
+    assert f"/static/app.css?v={_EXPECTED_VERSION}" in html
+    assert f"/static/app.js?v={_EXPECTED_VERSION}" in html
 
 
 def test_dashboard_no_key_leak_by_default():

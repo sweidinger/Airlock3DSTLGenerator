@@ -3,6 +3,13 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.3.2] - 2026-07-30
+### Behoben
+- Dashboard: Cache-Busting für `/static`-Assets (`app.css`/`app.js`/`viewer.js`
+  mit `?v=<Version>`). Der Browser lädt nach einem Update jetzt automatisch die
+  neuen Dateien — kein manuelles Hard-Reload mehr nötig (dadurch wurden z. B. die
+  neuen Checkboxen aus 1.3.1 erst nach Cache-Leeren sichtbar).
+
 ## [1.3.1] - 2026-07-30
 ### Behoben
 - Dashboard: Auswahl-Checkboxen in der Airlock-Tabelle waren durch die globale
