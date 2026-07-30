@@ -66,7 +66,7 @@ class Settings:
     threemf_plate: float = float(os.environ.get("AIRLOCK_3MF_PLATE", "256"))
     threemf_margin: float = float(os.environ.get("AIRLOCK_3MF_MARGIN", "8"))
     threemf_gap: float = float(os.environ.get("AIRLOCK_3MF_GAP", "6"))
-    threemf_color_body: str = os.environ.get("AIRLOCK_3MF_COLOR_BODY", "#111111")
+    threemf_color_body: str = os.environ.get("AIRLOCK_3MF_COLOR_BODY", "#000000")
     threemf_color_code: str = os.environ.get("AIRLOCK_3MF_COLOR_CODE", "#FFFFFF")
 
     profile: TemplateProfile = field(default_factory=TemplateProfile)

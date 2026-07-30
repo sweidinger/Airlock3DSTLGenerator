@@ -3,6 +3,19 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.4.0] - 2026-07-30
+### Hinzugefügt
+- Mehrfarb-Export als **OBJ** (Per-Vertex-Farbe) zusätzlich zum 3MF. Format wird
+  im Dashboard gewählt (3MF (Farbe) / OBJ (Farbe)); der Button heißt jetzt
+  „Mehrfarbe erstellen". API: `format`-Feld in `POST /v1/airlocks:threemf`,
+  Download über `/v1/threemf/{name}` auch für `.obj`.
+### Geändert / Behoben
+- 3MF-Farbe jetzt **pro Dreieck** über die 3MF-Material-Erweiterung
+  (`m:colorgroup`) statt über Basismaterialien/Extruder-Zuweisung. Dadurch färbt
+  Bambu Studio ALLE Locks eines Batches korrekt zweifarbig (vorher nur der erste)
+  — Schloss schwarz, Nummer weiß. Beim Import mappt Bambu die zwei Farben auf die
+  Filament-Slots.
+
 ## [1.3.3] - 2026-07-30
 ### Behoben
 - Update-Watcher: Es zählen nur noch echte Release-Tags (`vX.Y.Z`). CI-/Test-Tags

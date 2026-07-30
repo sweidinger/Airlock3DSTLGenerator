@@ -10,7 +10,7 @@ from pathlib import Path
 from .config import settings
 from .generator import Generator, validate_code
 from .registry import Registry
-from .threemf import Airlock3MFItem, build_3mf
+from .threemf import Airlock3MFItem, build_3mf, build_obj
 
 
 class AirlockService:
@@ -64,14 +64,18 @@ class AirlockService:
         return view
 
     def build_threemf(self, *, codes: list[str] | None = None, batch_id: str | None = None,
-                      requested_by: str = "dashboard",
+                      requested_by: str = "dashboard", fmt: str = "3mf",
                       plate: float | None = None, margin: float | None = None,
                       gap: float | None = None) -> dict:
-        """Erzeugt eine Mehrfarb-3MF (Body schwarz, Code weiß) im Raster.
+        """Erzeugt einen Mehrfarb-Export (Body schwarz, Code weiß) im Raster.
 
-        Codes kommen entweder direkt oder aus einem Batch. Body- und Code-Teil
-        werden je Code frisch gerendert (deterministisch) und in eine 3MF gepackt.
+        `fmt`: "3mf" (Pro-Dreieck-Farbe, m:colorgroup) oder "obj" (Per-Vertex-Farbe).
+        Beide liest Bambu Studio als zweifarbig ein. Codes kommen direkt oder aus
+        einem Batch; Body- und Code-Teil werden je Code frisch gerendert.
         """
+        fmt = (fmt or "3mf").lower()
+        if fmt not in ("3mf", "obj"):
+            raise ValueError("format muss '3mf' oder 'obj' sein.")
         if batch_id:
             rows = self.registry.airlocks_of_batch(batch_id)
             code_list = [r["code"] for r in rows]
@@ -102,8 +106,9 @@ class AirlockService:
             out_dir = Path(self.cfg.output_dir)
             out_dir.mkdir(parents=True, exist_ok=True)
             token = "tmf_" + uuid.uuid4().hex[:12]
-            out_path = out_dir / f"{token}.3mf"
-            res = build_3mf(
+            out_path = out_dir / f"{token}.{fmt}"
+            builder = build_obj if fmt == "obj" else build_3mf
+            res = builder(
                 items, out_path,
                 plate=plate if plate is not None else self.cfg.threemf_plate,
                 margin=margin if margin is not None else self.cfg.threemf_margin,
@@ -116,6 +121,7 @@ class AirlockService:
 
         return {
             "file": out_path.name,
+            "format": fmt,
             "download_url": f"/v1/threemf/{out_path.name}",
             "count": res.count,
             "codes": code_list,
