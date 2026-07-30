@@ -11,8 +11,10 @@ import Foundation
 ///
 /// Voraussetzung: Capability „Near Field Communication Tag Reading" +
 /// `NFCReaderUsageDescription` in Info.plist (siehe CLAUDE.md).
-@MainActor
-final class NFCWriterService: NSObject, ObservableObject, NFCTagReaderSessionDelegate {
+/// Nicht `@MainActor`: Core NFC ruft die Delegate-Methoden auf seiner eigenen
+/// Queue auf. Die Klasse wird immer seriell genutzt (nur eine Schreib-Sitzung
+/// gleichzeitig), daher `@unchecked Sendable`.
+final class NFCWriterService: NSObject, ObservableObject, NFCTagReaderSessionDelegate, @unchecked Sendable {
 
     struct WriteResult { let code: String; let uid: String }
 
