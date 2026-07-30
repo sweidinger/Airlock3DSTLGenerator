@@ -1,0 +1,35 @@
+name: Tag on merged PR
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  tag-on-merge:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create tag
+        run: |
+          COMMIT_SHA="${{ github.event.pull_request.merge_commit_sha || github.sha }}"
+          TAG="vci-test-${{ github.run_id }}"
+          echo "Creating tag $TAG on $COMMIT_SHA"
+          git tag "$TAG" "$COMMIT_SHA"
+
+      - name: Push tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="vci-test-${{ github.run_id }}"
+          echo "Pushing tag $TAG"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}" "refs/tags/$TAG"
