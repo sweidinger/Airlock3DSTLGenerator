@@ -42,17 +42,21 @@ async function viewSTL(path, title){
   }catch(e){ toast('Viewer-Fehler: '+e.message,'err'); }
 }
 
-// ---- Mehrfarb-3MF (Bambu) ----
+// ---- Mehrfarb-Export (Bambu): 3MF / OBJ ----
 async function threemfExport(body, btn){
+  const fmt = ($('#tmfFormat') && $('#tmfFormat').value) || '3mf';
+  body = Object.assign({format: fmt}, body);
   if(btn) btn.disabled=true;
-  toast('3MF wird erstellt…');
+  toast('Export wird erstellt…');
   try{
     const j = await api('/v1/airlocks:threemf',{method:'POST',body});
-    download(j.download_url, 'airlocks_'+j.count+'.3mf');
+    const f = (j.format||fmt);
+    download(j.download_url, 'airlocks_'+j.count+'.'+f);
     const grid = `Raster ${j.cols}×${j.rows}`;
-    if(!j.fits_on_plate) toast(`3MF: ${j.count} Airlock(s), ${grid} — passt NICHT auf eine ${j.plate}-mm-Platte!`,'err');
-    else toast(`3MF: ${j.count} Airlock(s), ${grid} · Download gestartet`,'ok');
-  }catch(e){ toast('3MF-Fehler: '+e.message,'err'); }
+    const F = f.toUpperCase();
+    if(!j.fits_on_plate) toast(`${F}: ${j.count} Airlock(s), ${grid} — passt NICHT auf eine ${j.plate}-mm-Platte!`,'err');
+    else toast(`${F}: ${j.count} Airlock(s), ${grid} · Download gestartet`,'ok');
+  }catch(e){ toast('Export-Fehler: '+e.message,'err'); }
   finally{ if(btn) btn.disabled=false; }
 }
 function selectedCodes(){ return Array.from(document.querySelectorAll('.tmfChk:checked')).map(c=>c.dataset.code); }
@@ -142,7 +146,7 @@ async function refreshBatches(){
       <td class="muted">${r.requested_by||''}</td><td class="muted">${fmtDate(r.created_at)}</td>
       <td class="row" style="gap:6px">
         ${r.zip_url?`<button class="secondary dl" data-path="${r.zip_url}" data-file="${r.batch_id}.zip">ZIP</button>`:''}
-        <button class="secondary tmf" data-batch="${r.batch_id}" title="Mehrfarb-3MF (Bambu) für diesen Batch">3MF</button>
+        <button class="secondary tmf" data-batch="${r.batch_id}" title="Mehrfarb-Export (Bambu) für diesen Batch – Format über die Auswahl oben">Farbe</button>
       </td>
     </tr>`).join('') : `<tr><td colspan="6" class="muted">keine Batches</td></tr>`;
     bindRowActions();
@@ -172,7 +176,7 @@ async function generate(){
       `<button class="secondary dl" data-path="/v1/airlocks/${a.code}/stl" data-file="${a.code}.stl">${a.code}</button>`+
       `<button class="secondary view" data-path="/v1/airlocks/${a.code}/stl" data-title="${a.code}">3D</button></span>`).join(' ');
     const zip = (r.zip_url?` &nbsp;·&nbsp; <button class="dl" data-path="${r.zip_url}" data-file="${r.batch_id}.zip">ZIP</button>`:'')
-      + ` <button class="secondary tmf" data-batch="${r.batch_id}">3MF (Mehrfarbe)</button>`;
+      + ` <button class="secondary tmf" data-batch="${r.batch_id}">Mehrfarbe</button>`;
     const conf = (r.conflicts&&r.conflicts.length)?`<div class="err" style="margin-top:6px">Konflikte: ${r.conflicts.join(', ')}</div>`:'';
     $('#genResult').innerHTML=`<div>Batch <span class="mono">${r.batch_id}</span> — ${pill(r.status)} — ${r.count} Airlock(s):</div>
       <div class="row" style="margin-top:8px">${links}${zip}</div>${conf}`;

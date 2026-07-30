@@ -145,14 +145,14 @@ def update_status(code: str, upd: StatusUpdate, svc: AirlockService = Depends(ge
     return _airlock_row_to_out(r)
 
 
-# ---- Mehrfarb-3MF (Bambu) --------------------------------------------
+# ---- Mehrfarb-Export (Bambu): 3MF / OBJ ------------------------------
 @app.post("/v1/airlocks:threemf", dependencies=[Depends(require_api_key)], tags=["airlocks"])
 def build_threemf(req: ThreeMFRequest, svc: AirlockService = Depends(get_service)):
     if req.codes and len(req.codes) > settings.max_batch:
         raise HTTPException(400, f"Zu viele Codes (max {settings.max_batch}).")
     try:
         return svc.build_threemf(
-            codes=req.codes, batch_id=req.batch_id,
+            codes=req.codes, batch_id=req.batch_id, fmt=req.format,
             plate=req.plate, margin=req.margin, gap=req.gap,
         )
     except ValueError as e:
@@ -162,12 +162,14 @@ def build_threemf(req: ThreeMFRequest, svc: AirlockService = Depends(get_service
 @app.get("/v1/threemf/{name}", dependencies=[Depends(require_api_key)], tags=["airlocks"])
 def download_threemf(name: str):
     import re as _re
-    if not _re.fullmatch(r"tmf_[0-9a-f]{6,}\.3mf", name):
-        raise HTTPException(400, "Ungültiger 3MF-Name.")
+    mt = _re.fullmatch(r"tmf_[0-9a-f]{6,}\.(3mf|obj)", name)
+    if not mt:
+        raise HTTPException(400, "Ungültiger Export-Name.")
     p = Path(settings.output_dir) / name
     if not p.is_file():
-        raise HTTPException(404, "3MF nicht gefunden.")
-    return FileResponse(p, media_type="model/3mf", filename=name)
+        raise HTTPException(404, "Export nicht gefunden.")
+    media = "model/obj" if mt.group(1) == "obj" else "model/3mf"
+    return FileResponse(p, media_type=media, filename=name)
 
 
 # ---- Batches ----------------------------------------------------------

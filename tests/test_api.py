@@ -188,7 +188,9 @@ def test_threemf_export():
     names = zf.namelist()
     assert "3D/3dmodel.model" in names and "[Content_Types].xml" in names
     model = zf.read("3D/3dmodel.model").decode()
-    assert model.count("<base ") == 2          # zwei Farben (Lock/Code)
+    assert model.count("<m:colorgroup") == 1   # eine Farbgruppe
+    assert model.count("<m:color ") == 2       # zwei Farben (Body/Code)
+    assert 'p1="0"' in model and 'p1="1"' in model  # Pro-Dreieck-Farbe je Teil
     assert model.count("<item ") == 3          # ein Bau-Item je Airlock
 
     # Direkte Code-Vorgabe inkl. Dedup
@@ -203,6 +205,20 @@ def test_threemf_export():
     assert client.post("/v1/airlocks:threemf", json={}, headers=AUTH).status_code == 422
     assert client.get("/v1/threemf/tmf_deadbeefcafe.3mf", headers=AUTH).status_code == 404
     assert client.get("/v1/threemf/not-a-token.3mf", headers=AUTH).status_code == 400
+
+    # OBJ-Format (Per-Vertex-Farbe, Body schwarz / Code weiss)
+    ro = client.post("/v1/airlocks:threemf",
+                     json={"batch_id": b["batch_id"], "format": "obj"}, headers=AUTH)
+    assert ro.status_code == 200
+    jo = ro.json()
+    assert jo["format"] == "obj" and jo["file"].endswith(".obj")
+    do = client.get(jo["download_url"], headers=AUTH)
+    assert do.status_code == 200 and do.headers["content-type"] == "model/obj"
+    objtxt = do.content.decode()
+    assert "0 0 0" in objtxt and "1 1 1" in objtxt   # zwei Vertex-Farben
+    # ungültiges Format -> 422
+    assert client.post("/v1/airlocks:threemf",
+                       json={"batch_id": b["batch_id"], "format": "stl"}, headers=AUTH).status_code == 422
 
 
 def test_config_masks_key():
