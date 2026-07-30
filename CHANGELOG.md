@@ -3,6 +3,23 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.8.0] - 2026-07-30
+### Hinzugefügt
+- **Writer-Keys** für eine native NFC-Writer-App: eigener Dashboard-Bereich
+  „KG-Tracker" → „Writer-Keys" (ein Key pro Gerät, benannt, einmalig anzeigbar,
+  widerrufen/regenerieren). Ein Writer-Key (`alw_…`) darf Airlocks **lesen** und
+  Tags **beschreiben** (`nfc/prepare`, `nfc/commit`) — aber nicht generieren,
+  herunterladen, den Status wechseln oder verifizieren. So muss nie der volle
+  API-Key aufs Handy; verlorene Geräte werden einzeln widerrufen. Keys werden nur
+  als SHA-256-Hash gespeichert. API (voller Key): `POST/GET /v1/writer/keys`,
+  `…/revoke`, `…/regenerate`. Auch Writer-Key-Anfragen erscheinen im Debug-Log.
+### Geändert
+- `nfc/prepare` und `nfc/commit` akzeptieren jetzt **auch** einen Writer-Key
+  (zusätzlich zum vollen Key); `GET /v1/airlocks` und `GET /v1/airlocks/{code}`
+  akzeptieren voller Key **oder** KG-Key **oder** Writer-Key. Die Scopes bleiben
+  getrennt: KG-Keys dürfen weiterhin nicht schreiben, Writer-Keys nicht
+  verifizieren/Status ändern.
+
 ## [1.7.0] - 2026-07-30
 ### Hinzugefügt
 - **NFC-Secret-Verwaltung im Dashboard** (Bereich „KG-Tracker"): starkes

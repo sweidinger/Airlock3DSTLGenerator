@@ -424,3 +424,71 @@ def test_nfc_secret_management():
     assert client.post("/v1/nfc/secret/restore",
                        json={"password": "geheim-123", "backup": blob}, headers=AUTH).status_code == 400
     assert client.get("/v1/nfc/secret/status").status_code == 401
+
+
+def test_writer_keys_and_scoped_access():
+    # Key erzeugen (nur mit vollem Key moeglich)
+    c = client.post("/v1/writer/keys", json={"name": "iPhone Werkstatt"}, headers=AUTH)
+    assert c.status_code == 200, c.text
+    j = c.json()
+    assert j["name"] == "iPhone Werkstatt" and j["key"].startswith("alw_")
+    WR = {"X-API-Key": j["key"]}
+
+    # Liste ist maskiert (kein Klartext-Key)
+    lst = client.get("/v1/writer/keys", headers=AUTH).json()
+    me = [k for k in lst if k["id"] == j["id"]]
+    assert me and me[0]["active"] is True
+    assert all("key" not in k for k in lst)
+
+    # Airlock (voller Key), dann mit Writer-Key lesen + Tag beschreiben
+    b = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()
+    code = b["airlocks"][0]["code"]
+    uid = "0455667788AA80"
+    assert client.get("/v1/airlocks", headers=WR).status_code == 200
+    assert client.get(f"/v1/airlocks/{code}", headers=WR).status_code == 200
+    assert client.post(f"/v1/airlocks/{code}/nfc/prepare", json={"uid": uid}, headers=WR).status_code == 200
+    cm = client.post(f"/v1/airlocks/{code}/nfc/commit", json={"uid": uid}, headers=WR)
+    assert cm.status_code == 200 and cm.json()["nfc_uid"] == "0455667788AA80"
+
+    # Writer-Key darf NICHT generieren / STL laden / Status setzen / verifizieren / Keys verwalten
+    assert client.post("/v1/airlocks:generate", json={"count": 1}, headers=WR).status_code == 401
+    assert client.get(f"/v1/airlocks/{code}/stl", headers=WR).status_code == 401
+    assert client.patch(f"/v1/airlocks/{code}", json={"status": "active"}, headers=WR).status_code == 401
+    assert client.post(f"/v1/airlocks/{code}/nfc/verify",
+                       json={"uid": uid, "token": "x"}, headers=WR).status_code == 401
+    assert client.post("/v1/writer/keys", json={"name": "x"}, headers=WR).status_code == 401
+    assert client.get("/v1/stats", headers=WR).status_code == 401
+
+    # Ein KG-Key darf umgekehrt NICHT schreiben (Scopes bleiben getrennt)
+    KG = {"X-API-Key": client.post("/v1/kg/keys", json={"name": "K"}, headers=AUTH).json()["key"]}
+    assert client.post(f"/v1/airlocks/{code}/nfc/prepare", json={"uid": uid}, headers=KG).status_code == 401
+
+    # Widerruf -> Key wirkungslos
+    assert client.post(f"/v1/writer/keys/{j['id']}/revoke", headers=AUTH).status_code == 200
+    assert client.get("/v1/airlocks", headers=WR).status_code == 401
+    # unbekannter Key -> 404
+    assert client.post("/v1/writer/keys/deadbeef/revoke", headers=AUTH).status_code == 404
+
+
+def test_writer_regenerate():
+    j = client.post("/v1/writer/keys", json={"name": "Rot"}, headers=AUTH).json()
+    old = {"X-API-Key": j["key"]}
+    b = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()
+    code = b["airlocks"][0]["code"]
+    assert client.get(f"/v1/airlocks/{code}", headers=old).status_code == 200
+    # regenerieren -> alter Key ungueltig, neuer gueltig, Name bleibt
+    g = client.post(f"/v1/writer/keys/{j['id']}/regenerate", headers=AUTH).json()
+    assert g["name"] == "Rot" and g["key"].startswith("alw_") and g["key"] != j["key"]
+    new = {"X-API-Key": g["key"]}
+    assert client.get(f"/v1/airlocks/{code}", headers=old).status_code == 401
+    assert client.get(f"/v1/airlocks/{code}", headers=new).status_code == 200
+
+
+def test_writer_key_in_debug_log():
+    client.post("/v1/kg/log:clear", headers=AUTH)
+    wrkey = client.post("/v1/writer/keys", json={"name": "LogWriter"}, headers=AUTH).json()["key"]
+    WR = {"X-API-Key": wrkey}
+    client.get("/v1/airlocks", headers=WR)
+    entries = client.get("/v1/kg/log", headers=AUTH).json()["entries"]
+    assert any(e["path"] == "/v1/airlocks" and e["key_name"] == "LogWriter" for e in entries)
+    assert wrkey not in _json.dumps(entries)

@@ -80,6 +80,17 @@ Pro Airlock gibt es einen **NFC**-Button:
 > Schreiben nur über eine native App oder ein NFC-Tool + den Fallback. Später
 > kann die native KG-Tracker-App das per Core NFC übernehmen.
 
+### Writer-Keys (native iOS-Writer-App)
+
+Damit eine native App die Tags per Core NFC beschreiben kann, ohne dass der
+**volle** API-Key aufs Gerät wandert, gibt es **Writer-Keys** (`alw_…`): eigener
+Dashboard-Bereich „KG-Tracker" → „Writer-Keys". Ein Writer-Key darf Airlocks
+**lesen** und Tags **beschreiben** (`nfc/prepare`, `nfc/commit`) — aber nicht
+generieren, herunterladen, den Status wechseln oder verifizieren. Ein Key pro
+Gerät, einzeln widerrufbar. API (voller Key): `POST/GET /v1/writer/keys`,
+`…/revoke`, `…/regenerate`. Die KG-Tracker-Keys (`kgt_…`) bleiben davon getrennt
+und dürfen weiterhin **nicht** schreiben.
+
 ## HTTPS (für Web NFC nötig)
 
 Web NFC/WebUSB brauchen einen „secure context". Dafür liegt ein optionaler
