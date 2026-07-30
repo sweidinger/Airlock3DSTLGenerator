@@ -56,7 +56,8 @@ async function threemfExport(body, btn){
   finally{ if(btn) btn.disabled=false; }
 }
 function selectedCodes(){ return Array.from(document.querySelectorAll('.tmfChk:checked')).map(c=>c.dataset.code); }
-function updateTmfSel(){ const n=selectedCodes().length; $('#tmfSelCount').textContent = n?(n+' markiert'):''; }
+function updateTmfSel(){ const n=selectedCodes().length; $('#tmfSelCount').textContent = n?(n+' markiert'):'';
+  const b=$('#tmfSelBtn'); if(b) b.disabled = n===0; }
 
 function pill(status){
   const c = STATUS_COLORS[status]||'var(--muted)';

@@ -3,6 +3,14 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.3.1] - 2026-07-30
+### Behoben
+- Dashboard: Auswahl-Checkboxen in der Airlock-Tabelle waren durch die globale
+  Input-Formatierung unsichtbar/nicht bedienbar — jetzt native Checkboxen.
+### Geändert
+- Button „3MF aus Auswahl" heißt jetzt „3MF erstellen" und ist ausgegraut,
+  solange keine Airlocks markiert sind.
+
 ## [1.3.0] - 2026-07-30
 ### Hinzugefügt
 - Mehrfarb-3MF-Export für Bambu Lab (X1/P1/A1, 256×256): Schloss in Schwarz,
