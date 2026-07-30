@@ -124,7 +124,7 @@ struct SettingsView: View {
                     SecureField("alw_…", text: $settings.writerKey)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    Text("Im Airlock-Dashboard unter „KG-Tracker" → „Writer-Keys" erzeugen. Der Key wird nur im iOS-Keychain gespeichert.")
+                    Text("Im Airlock-Dashboard unter \"KG-Tracker\" \u{2192} \"Writer-Keys\" erzeugen. Der Key wird nur im iOS-Keychain gespeichert.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }
