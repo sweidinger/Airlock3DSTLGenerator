@@ -2,17 +2,20 @@
 # Web NFC / WebUSB im Browser brauchen einen "secure context" (HTTPS).
 #
 # `tls internal` erzeugt Zertifikate aus Caddys lokaler CA. Fuer eine
-# Warnung-freie Nutzung die Caddy-Root-CA auf dem Geraet/Handy installieren
+# warnungsfreie Nutzung die Caddy-Root-CA auf dem Geraet/Handy installieren
 # (siehe docs/NFC.md), sonst einmalig die Browser-Warnung akzeptieren.
 #
-# Upstream (Ziel) wird per Umgebungsvariable AIRLOCK_UPSTREAM gesetzt,
-# z. B. "airlock-generator:8000" (gleiches Docker-Netz) oder "<nas-ip>:8010".
-
+# AIRLOCK_SITE_ADDR: vollstaendige Site-Adresse inkl. Host/IP, damit das
+#   Zertifikat zur aufgerufenen Adresse passt, z. B. "https://10.0.1.9:8443".
+#   Leer -> ":8443" (nur Port; Zertifikat ohne passenden Host -> Warnung).
+# AIRLOCK_UPSTREAM: Ziel, z. B. "airlock-generator:8000" (gleiches Docker-Netz)
+#   oder "<nas-ip>:8010" (bereits veroeffentlichter HTTP-Port).
 {
 	auto_https disable_redirects
 }
 
-:8443 {
+{$AIRLOCK_SITE_ADDR::8443} {
+	bind 0.0.0.0
 	tls internal
 	reverse_proxy {$AIRLOCK_UPSTREAM}
 }

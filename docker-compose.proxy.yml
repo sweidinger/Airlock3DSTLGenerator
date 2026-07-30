@@ -1,13 +1,17 @@
 # Optionaler HTTPS-Reverse-Proxy (Caddy) vor den Generator, damit das
 # Dashboard ueber HTTPS erreichbar ist (Voraussetzung fuer Web NFC / WebUSB).
 #
-# Start zusaetzlich zum Generator, z. B.:
+# Variante A – im selben Docker-Netz wie der Generator:
 #   AIRLOCK_UPSTREAM=airlock-generator:8000 \
 #   docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
 #
-# Danach: https://<nas-host>:8443  (einmalig Zertifikat akzeptieren)
+# Variante B – standalone gegen den bereits per HTTP veroeffentlichten Port:
+#   AIRLOCK_UPSTREAM=<nas-ip>:8010  AIRLOCK_SITE_ADDR=https://<nas-ip>:8443 \
+#   AIRLOCK_HTTPS_PORT=8453  docker compose -f docker-compose.proxy.yml up -d
+#
+# Danach: https://<nas-ip>:<AIRLOCK_HTTPS_PORT>  (einmalig Caddy-Root-CA
+# auf dem Geraet installieren -> siehe docs/NFC.md).
 name: airlock-generator
-
 services:
   caddy:
     image: caddy:2
@@ -17,11 +21,13 @@ services:
     environment:
       # Ziel des Proxys. Standard: der Generator-Service im selben Compose-Netz.
       AIRLOCK_UPSTREAM: "${AIRLOCK_UPSTREAM:-airlock-generator:8000}"
+      # Vollstaendige Site-Adresse inkl. Host/IP fuers TLS-Zertifikat, z. B.
+      # "https://10.0.1.9:8443". Leer = nur Port (":8443", Zertifikat ohne Host).
+      AIRLOCK_SITE_ADDR: "${AIRLOCK_SITE_ADDR:-}"
     volumes:
       - ./proxy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-
 volumes:
   caddy_data:
   caddy_config:
