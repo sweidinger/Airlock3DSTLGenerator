@@ -73,6 +73,10 @@ class Settings:
     # (dasselbe Secret braucht später der KG-Tracker zum Offline-Verifizieren).
     nfc_secret: str = os.environ.get("AIRLOCK_NFC_SECRET", "change-me-nfc-secret")
 
+    # Optionaler statischer KG-Tracker-Key (Alternative zu den im Dashboard
+    # erzeugten Keys). Leer = nur die dynamisch erzeugten Keys gelten.
+    kg_api_key: str = os.environ.get("AIRLOCK_KG_API_KEY", "")
+
     profile: TemplateProfile = field(default_factory=TemplateProfile)
 
     @property

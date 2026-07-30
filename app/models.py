@@ -81,6 +81,16 @@ class NfcVerifyRequest(BaseModel):
     """Verifikation durch den KG-Tracker: UID + Token vom gelesenen Tag."""
     uid: str = Field(description="Tag-UID (Hex)")
     token: str = Field(description="Token aus dem NDEF-Record")
+    require_status: Optional[str] = Field(
+        default=None,
+        description="Wenn gesetzt, muss der Airlock genau diesen Status haben (z. B. 'active').",
+    )
+
+
+class KgKeyCreate(BaseModel):
+    """Erzeugt einen eingeschraenkten KG-Tracker-Key."""
+    name: str = Field(default="KG-Tracker", max_length=64,
+                      description="Anzeigename zur Wiedererkennung")
 
 
 class StatusUpdate(BaseModel):
