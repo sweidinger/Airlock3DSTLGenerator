@@ -373,3 +373,54 @@ def test_kg_debug_log():
     assert kgkey not in _json.dumps(entries2)
     # Log-Zugriff selbst braucht den vollen Key
     assert client.get("/v1/kg/log", headers=KG).status_code == 401
+
+
+def test_nfc_secret_management():
+    # Ausgangszustand: kein echtes Secret (Default)
+    st = client.get("/v1/nfc/secret/status", headers=AUTH).json()
+    assert st["configured"] is False and st["source"] == "default" and st["env_override"] is False
+
+    # generate ohne confirm -> 400
+    assert client.post("/v1/nfc/secret/generate", json={}, headers=AUTH).status_code == 400
+
+    # generate mit confirm -> Secret gesetzt (einmal sichtbar)
+    g = client.post("/v1/nfc/secret/generate", json={"confirm": True}, headers=AUTH).json()
+    secret1 = g["secret"]
+    assert len(secret1) == 64 and g["source"] == "db" and g["configured"] is True
+    assert client.get("/v1/nfc/secret/status", headers=AUTH).json()["source"] == "db"
+
+    # Das effektive Secret wird tatsaechlich fuer Tokens genutzt
+    b = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()
+    code = b["airlocks"][0]["code"]
+    uid = "04ABCDEF120380"
+    p = client.post(f"/v1/airlocks/{code}/nfc/prepare", json={"uid": uid}, headers=AUTH).json()
+    assert p["secret_configured"] is True
+    token = p["token"]
+    client.post(f"/v1/airlocks/{code}/nfc/commit", json={"uid": uid}, headers=AUTH)
+    assert client.post(f"/v1/airlocks/{code}/nfc/verify",
+                       json={"uid": uid, "token": token}, headers=AUTH).json()["valid"] is True
+
+    # Backup exportieren (Passwort schuetzt die Datei; kein Klartext-Secret drin)
+    bk = client.post("/v1/nfc/secret/backup", json={"password": "geheim-123"}, headers=AUTH).json()
+    blob = bk["backup"]
+    assert secret1 not in blob and "airlock-nfc-secret-backup" in blob
+
+    # Rotieren -> altes Token wird ungueltig
+    g2 = client.post("/v1/nfc/secret/generate", json={"confirm": True}, headers=AUTH).json()
+    assert g2["secret"] != secret1
+    assert client.post(f"/v1/airlocks/{code}/nfc/verify",
+                       json={"uid": uid, "token": token}, headers=AUTH).json()["reason"] == "bad_signature"
+
+    # Restore aus Backup -> altes Secret zurueck, Token wieder gueltig
+    r = client.post("/v1/nfc/secret/restore",
+                    json={"password": "geheim-123", "backup": blob, "confirm": True}, headers=AUTH)
+    assert r.status_code == 200
+    assert client.post(f"/v1/airlocks/{code}/nfc/verify",
+                       json={"uid": uid, "token": token}, headers=AUTH).json()["valid"] is True
+
+    # Falsches Passwort -> 422; ohne confirm -> 400; ohne Key -> 401
+    assert client.post("/v1/nfc/secret/restore",
+                       json={"password": "falsch", "backup": blob, "confirm": True}, headers=AUTH).status_code == 422
+    assert client.post("/v1/nfc/secret/restore",
+                       json={"password": "geheim-123", "backup": blob}, headers=AUTH).status_code == 400
+    assert client.get("/v1/nfc/secret/status").status_code == 401

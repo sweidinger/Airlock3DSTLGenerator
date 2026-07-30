@@ -3,6 +3,19 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.7.0] - 2026-07-30
+### Hinzugefügt
+- **NFC-Secret-Verwaltung im Dashboard** (Bereich „KG-Tracker"): starkes
+  Zufalls-Secret erzeugen (einmal anzeigbar), Status sehen und ein
+  **passwortgeschütztes Backup** exportieren/wiederherstellen (scrypt +
+  AES-256-GCM — das Passwort schützt nur die Backup-Datei). Das Secret liegt in
+  der DB; eine gesetzte `AIRLOCK_NFC_SECRET`-Env behält **Vorrang**. Rotation ist
+  mit Warnung abgesichert (macht bestehende Tags ungültig). API (voller Key):
+  `GET/POST /v1/nfc/secret/status|generate|backup|restore`.
+### Geändert
+- `nfc/prepare` und `nfc/verify` nutzen jetzt das **effektive** Secret
+  (Env-Override → DB → Default) statt nur der Env-Variable.
+
 ## [1.6.0] - 2026-07-30
 ### Hinzugefügt
 - Eingeschränkte **KG-Tracker-API-Keys**: eigener Dashboard-Bereich „KG-Tracker",
