@@ -1,5 +1,10 @@
 name: Tag on merged PR
 
+# Erzeugt bei jedem gemergten PR auf main einen Release-Tag v<VERSION>
+# (aus der VERSION-Datei). Existiert der Tag schon, passiert nichts.
+# So entstehen echte Versions-Tags statt Test-Tags, und der Release-Workflow
+# (ci.yml, on: push tags v*) baut daraus automatisch ein GitHub-Release.
+
 on:
   pull_request:
     types: [closed]
@@ -11,25 +16,26 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout
+      - name: Checkout main
         uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
 
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Create tag
-        run: |
-          COMMIT_SHA="${{ github.event.pull_request.merge_commit_sha || github.sha }}"
-          TAG="vci-test-${{ github.run_id }}"
-          echo "Creating tag $TAG on $COMMIT_SHA"
-          git tag "$TAG" "$COMMIT_SHA"
-
-      - name: Push tag
+      - name: Tag v<VERSION> erstellen (falls neu)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="vci-test-${{ github.run_id }}"
-          echo "Pushing tag $TAG"
-          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}" "refs/tags/$TAG"
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [ -z "$VERSION" ]; then
+            echo "VERSION-Datei leer oder fehlt - abbrechen."; exit 0
+          fi
+          TAG="v${VERSION}"
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "Tag ${TAG} existiert bereits - nichts zu tun."; exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "${TAG}"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}" "refs/tags/${TAG}"
+          echo "Tag ${TAG} erstellt und gepusht."
