@@ -110,15 +110,17 @@ function pill(status){
   return `<span class="pill" style="background:${c}">${status}</span>`;
 }
 function fmtDate(s){ if(!s) return '—'; try{return new Date(s).toLocaleString('de-DE')}catch(e){return s} }
+function fmtTime(s){ if(!s) return '—'; try{return new Date(s).toLocaleTimeString('de-DE')}catch(e){return s} }
 
-// ---- Ansichts-Umschaltung (Dashboard / Updates) ----
+// ---- Ansichts-Umschaltung (Dashboard / KG-Tracker / Updates) ----
 function showView(name){
-  const dash = name!=='updates';
-  $('#viewDashboard').style.display = dash?'':'none';
-  $('#viewUpdates').style.display = dash?'none':'';
-  $('#navDashboard').classList.toggle('active', dash);
-  $('#navUpdates').classList.toggle('active', !dash);
-  if(!dash){ if(window._lastUpd) renderUpdatesPage(window._lastUpd); refreshUpdates(); }
+  const views = {dashboard:'#viewDashboard', kg:'#viewKg', updates:'#viewUpdates'};
+  Object.entries(views).forEach(([n,sel])=>{ const el=$(sel); if(el) el.style.display = (n===name)?'':'none'; });
+  $('#navDashboard').classList.toggle('active', name==='dashboard');
+  const nk=$('#navKg'); if(nk) nk.classList.toggle('active', name==='kg');
+  $('#navUpdates').classList.toggle('active', name==='updates');
+  if(name==='updates'){ if(window._lastUpd) renderUpdatesPage(window._lastUpd); refreshUpdates(); }
+  if(name==='kg'){ refreshKgKeys(); refreshKgLog(); startKgAuto(); } else { stopKgAuto(); }
 }
 
 async function refreshStats(){
@@ -293,6 +295,64 @@ async function applyUpdate(){
   catch(e){ toast('Fehler: '+e.message,'err'); $('#applyUpdateBtn').disabled=false; $('#uApplyHint').textContent=''; }
 }
 
+// ---- KG-Tracker: eingeschränkte Keys + Debug-Log ----
+async function refreshKgKeys(){
+  try{
+    const rows = await api('/v1/kg/keys');
+    $('#kgKeyRows').innerHTML = rows.length ? rows.map(r=>`<tr>
+      <td>${esc(r.name)}</td>
+      <td class="mono">${esc(r.key_prefix)}…</td>
+      <td class="muted">${fmtDate(r.created_at)}</td>
+      <td class="muted">${r.last_used_at?fmtDate(r.last_used_at):'—'}</td>
+      <td>${r.active?'<span class="pill" style="background:var(--active)">aktiv</span>':'<span class="pill" style="background:var(--retired)">widerrufen</span>'}</td>
+      <td class="row" style="gap:6px">${r.active?
+        `<button class="secondary kgReg" data-id="${r.id}">Regenerate</button>
+         <button class="secondary kgRev" data-id="${r.id}">Widerrufen</button>`:'—'}</td>
+    </tr>`).join('') : `<tr><td colspan="6" class="muted">keine Keys</td></tr>`;
+    document.querySelectorAll('.kgRev').forEach(b=>b.onclick=()=>revokeKgKey(b.dataset.id));
+    document.querySelectorAll('.kgReg').forEach(b=>b.onclick=()=>regenerateKgKey(b.dataset.id));
+  }catch(e){ $('#kgKeyRows').innerHTML=`<tr><td colspan="6" class="err">${esc(e.message)}</td></tr>`; }
+}
+function showNewKgKey(j){ $('#kgNewKey').value=j.key; $('#kgNewKeyBox').style.display=''; toast('Key erzeugt — nur jetzt sichtbar','ok'); }
+async function createKgKey(){
+  const name=($('#kgKeyName').value||'').trim()||'KG-Tracker';
+  try{ const j=await api('/v1/kg/keys',{method:'POST',body:{name}}); $('#kgKeyName').value=''; showNewKgKey(j); refreshKgKeys(); }
+  catch(e){ toast('Fehler: '+e.message,'err'); }
+}
+async function revokeKgKey(id){
+  if(!confirm('Diesen Key widerrufen? Die KG-Tracker-App kann sich damit nicht mehr verbinden.')) return;
+  try{ await api('/v1/kg/keys/'+id+'/revoke',{method:'POST'}); toast('Key widerrufen','ok'); refreshKgKeys(); }
+  catch(e){ toast('Fehler: '+e.message,'err'); }
+}
+async function regenerateKgKey(id){
+  if(!confirm('Neuen Key erzeugen? Der bisherige wird sofort ungültig.')) return;
+  try{ const j=await api('/v1/kg/keys/'+id+'/regenerate',{method:'POST'}); showNewKgKey(j); refreshKgKeys(); }
+  catch(e){ toast('Fehler: '+e.message,'err'); }
+}
+function kgNoteCls(n){ if(!n) return ''; if(n.indexOf('True')>=0) return 'ok';
+  if(n.indexOf('False')>=0||n.indexOf('auth_failed')>=0) return 'err'; return ''; }
+async function refreshKgLog(){
+  try{
+    const j = await api('/v1/kg/log?limit=200'); const rows=j.entries||[];
+    $('#kgLogCount').textContent = rows.length+' Einträge';
+    $('#kgLogRows').innerHTML = rows.length ? rows.map(e=>`<tr>
+      <td class="mono muted" style="white-space:nowrap">${fmtTime(e.ts)}</td>
+      <td class="mono">${esc(e.method)}</td>
+      <td class="mono" style="word-break:break-all">${esc(e.path)}</td>
+      <td class="mono">${esc(e.key_prefix||'—')}…${e.key_name?(' <span class="muted">'+esc(e.key_name)+'</span>'):''}</td>
+      <td class="mono ${e.status>=400?'err':'ok'}">${e.status}</td>
+      <td class="mono ${kgNoteCls(e.note)}">${esc(e.note||'')}</td>
+    </tr>`).join('') : `<tr><td colspan="6" class="muted">keine Einträge</td></tr>`;
+  }catch(e){ $('#kgLogRows').innerHTML=`<tr><td colspan="6" class="err">${esc(e.message)}</td></tr>`; }
+}
+async function clearKgLog(){
+  try{ await api('/v1/kg/log:clear',{method:'POST'}); refreshKgLog(); toast('Log geleert','ok'); }
+  catch(e){ toast('Fehler: '+e.message,'err'); }
+}
+function startKgAuto(){ stopKgAuto();
+  if($('#kgAuto') && $('#kgAuto').checked){ window._kgPoll=setInterval(()=>{ if($('#viewKg').style.display!=='none') refreshKgLog(); }, 4000); } }
+function stopKgAuto(){ if(window._kgPoll){ clearInterval(window._kgPoll); window._kgPoll=null; } }
+
 async function connect(){
   BASE = $('#baseUrl').value.trim().replace(/\/$/,'');
   KEY = $('#apiKey').value.trim();
@@ -335,6 +395,15 @@ $('#nfcCommitBtn').onclick = async ()=>{ const uid=$('#nfcUid').value.trim();
   catch(e){ toast('Fehler: '+e.message,'err'); } };
 $('#navDashboard').onclick = ()=>showView('dashboard');
 $('#navUpdates').onclick = ()=>showView('updates');
+if($('#navKg')) $('#navKg').onclick = ()=>showView('kg');
+if($('#kgCreateBtn')) $('#kgCreateBtn').onclick = createKgKey;
+if($('#kgKeyName')) $('#kgKeyName').addEventListener('keydown',e=>{if(e.key==='Enter')createKgKey();});
+if($('#kgNewKeyCopy')) $('#kgNewKeyCopy').onclick = ()=>{ const t=$('#kgNewKey').value;
+  if(t && navigator.clipboard){ navigator.clipboard.writeText(t); toast('Kopiert','ok'); } };
+if($('#kgNewKeyHide')) $('#kgNewKeyHide').onclick = ()=>{ $('#kgNewKeyBox').style.display='none'; $('#kgNewKey').value=''; };
+if($('#kgLogReload')) $('#kgLogReload').onclick = refreshKgLog;
+if($('#kgLogClear')) $('#kgLogClear').onclick = clearKgLog;
+if($('#kgAuto')) $('#kgAuto').onchange = startKgAuto;
 $('#filterStatus').onchange = refreshAirlocks;
 $('#apiKey').addEventListener('keydown',e=>{if(e.key==='Enter')connect();});
 $('#baseUrl').value = localStorage.getItem('airlock_base')||'';

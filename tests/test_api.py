@@ -269,3 +269,107 @@ def test_config_masks_key():
     assert body["profile"]["name"] == "DisposableLock_v2"
     assert body["max_batch"] == 50
     assert client.get("/v1/config").status_code == 401
+
+
+import json as _json
+
+
+def test_kg_keys_and_scoped_access():
+    # Key erzeugen (nur mit vollem Key moeglich)
+    c = client.post("/v1/kg/keys", json={"name": "Handy"}, headers=AUTH)
+    assert c.status_code == 200, c.text
+    j = c.json()
+    assert j["name"] == "Handy" and j["key"].startswith("kgt_")
+    KG = {"X-API-Key": j["key"]}
+
+    # Liste ist maskiert (kein Klartext-Key)
+    lst = client.get("/v1/kg/keys", headers=AUTH).json()
+    me = [k for k in lst if k["id"] == j["id"]]
+    assert me and me[0]["active"] is True
+    assert all("key" not in k for k in lst)
+
+    # Airlock (voller Key), dann mit KG-Key lesen + Status setzen
+    b = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()
+    code = b["airlocks"][0]["code"]
+    assert client.get("/v1/airlocks", headers=KG).status_code == 200
+    assert client.get(f"/v1/airlocks/{code}", headers=KG).status_code == 200
+    assert client.patch(f"/v1/airlocks/{code}", json={"status": "active"}, headers=KG).status_code == 200
+
+    # KG-Key darf NICHT generieren / STL laden / Tag schreiben / Keys verwalten
+    assert client.post("/v1/airlocks:generate", json={"count": 1}, headers=KG).status_code == 401
+    assert client.get(f"/v1/airlocks/{code}/stl", headers=KG).status_code == 401
+    assert client.post(f"/v1/airlocks/{code}/nfc/prepare", json={"uid": "04112233445580"}, headers=KG).status_code == 401
+    assert client.post("/v1/kg/keys", json={"name": "x"}, headers=KG).status_code == 401
+    assert client.get("/v1/stats", headers=KG).status_code == 401
+
+    # Widerruf -> Key wirkungslos
+    assert client.post(f"/v1/kg/keys/{j['id']}/revoke", headers=AUTH).status_code == 200
+    assert client.get("/v1/airlocks", headers=KG).status_code == 401
+    # unbekannter Key -> 404
+    assert client.post("/v1/kg/keys/deadbeef/revoke", headers=AUTH).status_code == 404
+
+
+def test_kg_regenerate():
+    j = client.post("/v1/kg/keys", json={"name": "Rot"}, headers=AUTH).json()
+    old = {"X-API-Key": j["key"]}
+    b = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()
+    code = b["airlocks"][0]["code"]
+    assert client.get(f"/v1/airlocks/{code}", headers=old).status_code == 200
+    # regenerieren -> alter Key ungueltig, neuer gueltig, Name bleibt
+    g = client.post(f"/v1/kg/keys/{j['id']}/regenerate", headers=AUTH).json()
+    assert g["name"] == "Rot" and g["key"].startswith("kgt_") and g["key"] != j["key"]
+    new = {"X-API-Key": g["key"]}
+    assert client.get(f"/v1/airlocks/{code}", headers=old).status_code == 401
+    assert client.get(f"/v1/airlocks/{code}", headers=new).status_code == 200
+
+
+def test_kg_verify_require_status():
+    b = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()
+    code = b["airlocks"][0]["code"]
+    uid = "04AABBCCDDEE80"
+    tok = client.post(f"/v1/airlocks/{code}/nfc/prepare", json={"uid": uid}, headers=AUTH).json()["token"]
+    client.post(f"/v1/airlocks/{code}/nfc/commit", json={"uid": uid}, headers=AUTH)
+    KG = {"X-API-Key": client.post("/v1/kg/keys", json={"name": "v"}, headers=AUTH).json()["key"]}
+
+    v = client.post(f"/v1/airlocks/{code}/nfc/verify", json={"uid": uid, "token": tok}, headers=KG).json()
+    assert v["valid"] is True
+    # require_status=active, Status ist 'generated' -> mismatch
+    m = client.post(f"/v1/airlocks/{code}/nfc/verify",
+                    json={"uid": uid, "token": tok, "require_status": "active"}, headers=KG).json()
+    assert m["valid"] is False and m["reason"] == "status_mismatch" and m["status"] == "generated"
+    # auf active setzen -> jetzt gueltig
+    client.patch(f"/v1/airlocks/{code}", json={"status": "active"}, headers=KG)
+    ok = client.post(f"/v1/airlocks/{code}/nfc/verify",
+                     json={"uid": uid, "token": tok, "require_status": "active"}, headers=KG).json()
+    assert ok["valid"] is True
+
+
+def test_available_filter():
+    b = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()
+    code = b["airlocks"][0]["code"]
+    # frisch (kein Tag) -> nicht verfuegbar
+    assert all(a["code"] != code for a in client.get("/v1/airlocks?available=true", headers=AUTH).json())
+    # Tag binden -> verfuegbar
+    client.post(f"/v1/airlocks/{code}/nfc/commit", json={"uid": "04CAFEBABE1280"}, headers=AUTH)
+    assert any(a["code"] == code for a in client.get("/v1/airlocks?available=true", headers=AUTH).json())
+    # aktiv -> nicht mehr verfuegbar
+    client.patch(f"/v1/airlocks/{code}", json={"status": "active"}, headers=AUTH)
+    assert all(a["code"] != code for a in client.get("/v1/airlocks?available=true", headers=AUTH).json())
+
+
+def test_kg_debug_log():
+    client.post("/v1/kg/log:clear", headers=AUTH)
+    kgkey = client.post("/v1/kg/keys", json={"name": "Logtest"}, headers=AUTH).json()["key"]
+    KG = {"X-API-Key": kgkey}
+    client.get("/v1/airlocks", headers=KG)
+    entries = client.get("/v1/kg/log", headers=AUTH).json()["entries"]
+    assert any(e["path"] == "/v1/airlocks" and e["method"] == "GET" and e["key_name"] == "Logtest"
+               for e in entries)
+    # Voll-Key-Anfragen tauchen NICHT im KG-Log auf
+    client.get("/v1/stats", headers=AUTH)
+    entries2 = client.get("/v1/kg/log", headers=AUTH).json()["entries"]
+    assert all(e["path"] != "/v1/stats" for e in entries2)
+    # Der Key-Klartext steht nie im Log
+    assert kgkey not in _json.dumps(entries2)
+    # Log-Zugriff selbst braucht den vollen Key
+    assert client.get("/v1/kg/log", headers=KG).status_code == 401
