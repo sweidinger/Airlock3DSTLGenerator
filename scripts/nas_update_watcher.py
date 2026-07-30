@@ -63,21 +63,30 @@ def write_status(**extra) -> None:
     f.write_text(json.dumps(st, indent=2))
 
 
+# Nur echte Release-Tags (vMAJOR.MINOR.PATCH) zaehlen. Sonstige Tags wie
+# CI-Test-Tags (z. B. "vci-test-123...") werden ignoriert -- sie matchen zwar
+# den v*-Glob, sind aber keine Versionen und wuerden sonst als "neueste"
+# fehlgedeutet.
+_VER_RE = re.compile(r"^v\d+\.\d+\.\d+$")
+
+
 def collect_history(limit: int = 15) -> list:
     out = git("for-each-ref", "--sort=-creatordate",
               "--format=%(refname:short)|%(creatordate:short)|%(contents:subject)",
               "refs/tags/v*").stdout.strip().splitlines()
     hist = []
-    for line in out[:limit]:
+    for line in out:
         p = line.split("|", 2)
-        if len(p) >= 2:
+        if len(p) >= 2 and _VER_RE.match(p[0]):
             hist.append({"version": p[0].lstrip("vV"), "date": p[1],
                          "subject": (p[2] if len(p) > 2 else "")})
+        if len(hist) >= limit:
+            break
     return hist
 
 
 def latest_tag() -> str:
-    tags = [t for t in git("tag", "-l", "v*").stdout.split() if t]
+    tags = [t for t in git("tag", "-l", "v*").stdout.split() if _VER_RE.match(t)]
     tags.sort(key=semver)
     return tags[-1] if tags else ""
 

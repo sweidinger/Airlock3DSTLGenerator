@@ -3,6 +3,12 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.3.3] - 2026-07-30
+### Behoben
+- Update-Watcher: Es zählen nur noch echte Release-Tags (`vX.Y.Z`). CI-/Test-Tags
+  wie `vci-test-…` matchten zwar den `v*`-Filter, wurden aber als riesige Version
+  fehlgedeutet und als „neueste" angezeigt — das ist jetzt ausgeschlossen.
+
 ## [1.3.2] - 2026-07-30
 ### Behoben
 - Dashboard: Cache-Busting für `/static`-Assets (`app.css`/`app.js`/`viewer.js`
