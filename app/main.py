@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import kgkeys, kglog, secretbackup
+from . import kgkeys, kglog, secretbackup, writerkeys
 from . import nfc as nfclib
 from .auth import require_api_key
 from .config import settings
@@ -17,7 +17,7 @@ from .generator import validate_code
 from .models import (AirlockOut, BatchOut, GenerateRequest, KgKeyCreate,
                      NfcCommitRequest, NfcPrepareRequest, NfcSecretBackupRequest,
                      NfcSecretGenerate, NfcSecretRestoreRequest, NfcVerifyRequest,
-                     StatusUpdate, ThreeMFRequest)
+                     StatusUpdate, ThreeMFRequest, WriterKeyCreate)
 from .registry import STATUSES, CodeExhaustionError
 from .service import AirlockService
 from .updates import read_status, request_update
@@ -91,6 +91,72 @@ async def require_kg_access(
     )
 
 
+def _identify_writer(presented: str, svc: AirlockService) -> dict | None:
+    """Ordnet einen praesentierten Key einem aktiven Writer-Key (DB) zu."""
+    if writerkeys.looks_like_writer_key(presented):
+        row = svc.registry.find_active_writer_key_by_hash(writerkeys.hash_key(presented))
+        if row is not None:
+            return {"id": row["id"], "prefix": row["key_prefix"], "name": row["name"]}
+    return None
+
+
+async def require_writer_access(
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    authorization: str | None = Header(default=None),
+    svc: AirlockService = Depends(get_service),
+) -> None:
+    """Erlaubt den vollen Key ODER einen gueltigen Writer-Key.
+
+    Fuer das Beschreiben der Tags (nfc/prepare, nfc/commit). Ein Writer-Key darf
+    NICHT generieren, herunterladen, den Status wechseln oder verifizieren.
+    """
+    presented = _presented_key(x_api_key, authorization)
+    if presented and secrets.compare_digest(presented, settings.api_key):
+        return
+    if presented:
+        info = _identify_writer(presented, svc)
+        if info is not None:
+            svc.registry.touch_writer_key(info["id"])
+            return
+    raise HTTPException(
+        status_code=401,
+        detail="Ungueltiger oder fehlender API-Key.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+async def require_read_access(
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    authorization: str | None = Header(default=None),
+    svc: AirlockService = Depends(get_service),
+) -> None:
+    """Lesezugriff: voller Key ODER KG-Key ODER Writer-Key.
+
+    Fuer das Auflisten/Ansehen der Airlocks (beide App-Typen brauchen das).
+    """
+    presented = _presented_key(x_api_key, authorization)
+    if not presented:
+        raise HTTPException(
+            status_code=401, detail="Ungueltiger oder fehlender API-Key.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if secrets.compare_digest(presented, settings.api_key):
+        return
+    kg = _identify_kg(presented, svc)
+    if kg is not None:
+        if kg["id"] != "env":
+            svc.registry.touch_kg_key(kg["id"])
+        return
+    wr = _identify_writer(presented, svc)
+    if wr is not None:
+        svc.registry.touch_writer_key(wr["id"])
+        return
+    raise HTTPException(
+        status_code=401, detail="Ungueltiger oder fehlender API-Key.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 @app.middleware("http")
 async def _kg_request_log(request: Request, call_next):
     """Protokolliert (nur) KG-Key-Anfragen an /v1 im In-Memory-Ringpuffer."""
@@ -102,10 +168,12 @@ async def _kg_request_log(request: Request, call_next):
                 request.headers.get("x-api-key"), request.headers.get("authorization")
             )
             if presented and not secrets.compare_digest(presented, settings.api_key):
-                looks = kgkeys.looks_like_kg_key(presented)
+                looks = (kgkeys.looks_like_kg_key(presented)
+                         or writerkeys.looks_like_writer_key(presented))
                 info = None
                 try:
-                    info = _identify_kg(presented, get_service())
+                    svc = get_service()
+                    info = _identify_kg(presented, svc) or _identify_writer(presented, svc)
                 except Exception:
                     info = None
                 if info is not None or looks:
@@ -188,7 +256,7 @@ def generate(req: GenerateRequest,
 
 
 @app.get("/v1/airlocks", response_model=list[AirlockOut],
-         dependencies=[Depends(require_kg_access)], tags=["airlocks"])
+         dependencies=[Depends(require_read_access)], tags=["airlocks"])
 def list_airlocks(status: str | None = None, batch_id: str | None = None,
                   available: bool = Query(False, description="Nur verfuegbare Locks (Tag gebunden, noch frei)"),
                   limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0),
@@ -199,7 +267,7 @@ def list_airlocks(status: str | None = None, batch_id: str | None = None,
 
 
 @app.get("/v1/airlocks/{code}", response_model=AirlockOut,
-         dependencies=[Depends(require_kg_access)], tags=["airlocks"])
+         dependencies=[Depends(require_read_access)], tags=["airlocks"])
 def get_airlock(code: str, svc: AirlockService = Depends(get_service)):
     code = _norm(code)
     r = svc.registry.get_airlock(code)
@@ -236,7 +304,7 @@ def update_status(code: str, upd: StatusUpdate, response: Response,
 
 
 # ---- NFC-Tag (signierter Token gebunden an Tag-UID) ------------------
-@app.post("/v1/airlocks/{code}/nfc/prepare", dependencies=[Depends(require_api_key)], tags=["nfc"])
+@app.post("/v1/airlocks/{code}/nfc/prepare", dependencies=[Depends(require_writer_access)], tags=["nfc"])
 def nfc_prepare(code: str, req: NfcPrepareRequest, svc: AirlockService = Depends(get_service)):
     code = _norm(code)
     if svc.registry.get_airlock(code) is None:
@@ -250,7 +318,7 @@ def nfc_prepare(code: str, req: NfcPrepareRequest, svc: AirlockService = Depends
     return payload
 
 
-@app.post("/v1/airlocks/{code}/nfc/commit", dependencies=[Depends(require_api_key)], tags=["nfc"])
+@app.post("/v1/airlocks/{code}/nfc/commit", dependencies=[Depends(require_writer_access)], tags=["nfc"])
 def nfc_commit(code: str, req: NfcCommitRequest, svc: AirlockService = Depends(get_service)):
     code = _norm(code)
     try:
@@ -479,6 +547,52 @@ def kg_log(limit: int = Query(200, ge=1, le=kglog.MAX_ENTRIES)):
 def kg_log_clear():
     kglog.clear()
     return {"ok": True}
+
+
+# ---- Writer-Keys: native NFC-Writer-App (nur voller Key) -------------
+def _writer_key_public(r) -> dict:
+    return {
+        "id": r["id"], "name": r["name"], "key_prefix": r["key_prefix"],
+        "created_at": r["created_at"], "last_used_at": r["last_used_at"],
+        "revoked_at": r["revoked_at"], "active": r["revoked_at"] is None,
+    }
+
+
+@app.post("/v1/writer/keys", dependencies=[Depends(require_api_key)], tags=["writer"])
+def writer_key_create(req: WriterKeyCreate, svc: AirlockService = Depends(get_service)):
+    raw, key_hash, prefix = writerkeys.new_key()
+    row = svc.registry.create_writer_key(writerkeys.new_id(), req.name, key_hash, prefix)
+    out = _writer_key_public(row)
+    out["key"] = raw  # nur EINMAL im Klartext
+    out["note"] = "Dieser Key wird nur einmal angezeigt – jetzt in die Writer-App uebernehmen."
+    return out
+
+
+@app.get("/v1/writer/keys", dependencies=[Depends(require_api_key)], tags=["writer"])
+def writer_key_list(svc: AirlockService = Depends(get_service)):
+    return [_writer_key_public(r) for r in svc.registry.list_writer_keys()]
+
+
+@app.post("/v1/writer/keys/{key_id}/revoke", dependencies=[Depends(require_api_key)], tags=["writer"])
+def writer_key_revoke(key_id: str, svc: AirlockService = Depends(get_service)):
+    if not svc.registry.revoke_writer_key(key_id):
+        raise HTTPException(404, "Writer-Key nicht gefunden.")
+    return {"ok": True, "id": key_id}
+
+
+@app.post("/v1/writer/keys/{key_id}/regenerate", dependencies=[Depends(require_api_key)], tags=["writer"])
+def writer_key_regenerate(key_id: str, svc: AirlockService = Depends(get_service)):
+    old = svc.registry.get_writer_key(key_id)
+    if old is None:
+        raise HTTPException(404, "Writer-Key nicht gefunden.")
+    svc.registry.revoke_writer_key(key_id)
+    raw, key_hash, prefix = writerkeys.new_key()
+    row = svc.registry.create_writer_key(writerkeys.new_id(), old["name"], key_hash, prefix)
+    out = _writer_key_public(row)
+    out["key"] = raw
+    out["replaced"] = key_id
+    out["note"] = "Neuer Key – nur einmal sichtbar. Der bisherige ist ungueltig."
+    return out
 
 
 # ---- NFC-Secret verwalten (voller Key) -------------------------------
