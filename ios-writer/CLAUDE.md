@@ -108,14 +108,16 @@ Core NFC läuft **nur auf echter Hardware**, nicht im Simulator.
 | `NFCWriterService.swift` | Core-NFC-Schreibfluss (siehe §6). |
 | `SettingsStore.swift` | Basis-URL (UserDefaults) + Writer-Key (Keychain). |
 | `UID.swift` | UID-Hex/Plausibilität. |
-| `Info.plist` | `NFCReaderUsageDescription`. |
+| `Info.plist` | Bundle-Standardkeys + `NFCReaderUsageDescription`. |
 | `AirlockWriter.entitlements` | NFC-Formate `NDEF`+`TAG`. |
+| `project.yml` | XcodeGen-Definition → erzeugt `AirlockWriter.xcodeproj`. |
 
 ## 8. Offene Punkte / TODO
 
-- **Xcode-Projekt (`.xcodeproj`) fehlt** — muss einmalig in Xcode angelegt werden
-  (README, Abschnitt „Xcode-Projekt anlegen"). Alternativ ein Tuist/XcodeGen-
-  `project.yml` ergänzen, damit das Projekt reproduzierbar generiert wird.
+- **Xcode-Projekt** wird reproduzierbar via **XcodeGen** aus `project.yml`
+  erzeugt (`xcodegen generate`, siehe README). Das `.xcodeproj` selbst ist bewusst
+  nicht eingecheckt (in `.gitignore`). `DEVELOPMENT_TEAM` in `project.yml` bzw.
+  in Xcode setzen.
 - **TLS-Trust härten:** `InsecureTrust` in `AirlockAPI.swift` akzeptiert jedes
   Serverzertifikat. Für Produktion: Caddy-Root-CA pinnen oder aufs Gerät
   installieren und den Delegate entfernen.

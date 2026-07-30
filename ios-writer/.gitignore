@@ -1,3 +1,6 @@
+# Von XcodeGen generiert (mit `xcodegen generate` neu erzeugen — nicht einchecken)
+*.xcodeproj/
+
 # Xcode
 build/
 DerivedData/

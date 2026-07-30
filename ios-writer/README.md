@@ -25,26 +25,38 @@ keine Portierung des KG-Trackers.
 - Ein **Writer-Key** aus dem Airlock-Dashboard → „KG-Tracker" → „Writer-Keys"
   (beginnt mit `alw_`). Airlock-App ≥ **v1.8.0**.
 
-## Xcode-Projekt anlegen
+## Xcode-Projekt erzeugen (XcodeGen — empfohlen)
 
-Dieses Repo enthält die **Quelldateien**, aber (noch) kein `.xcodeproj`. So wird
-daraus ein lauffähiges Projekt:
+Das `.xcodeproj` ist **nicht** eingecheckt, sondern wird reproduzierbar aus
+`project.yml` generiert (Bundle-ID, iOS-Target, Info.plist- und
+Entitlements-Zuordnung stehen dort):
 
-1. Xcode → **File ▸ New ▸ Project… ▸ iOS ▸ App**.
-   - Product Name: `AirlockWriter`
-   - Interface: **SwiftUI**, Language: **Swift**
-   - Bundle Identifier: z. B. `de.sweidinger.airlockwriter`
-2. Die generierte `ContentView.swift`/`…App.swift` löschen und **alle Dateien aus
-   `AirlockWriter/` hier** ins Projekt ziehen („Copy items if needed" aus, da schon
-   im Repo; sonst „Create groups").
-3. **Signing & Capabilities**:
-   - Team auswählen (Dein Apple-Dev-Account).
-   - **+ Capability ▸ Near Field Communication Tag Reading**. Xcode legt die
-     Entitlements an – Inhalt mit `AirlockWriter/AirlockWriter.entitlements`
-     abgleichen (`NDEF` + `TAG`).
-4. **Info.plist**: den Schlüssel `NFCReaderUsageDescription` setzen (siehe
-   `AirlockWriter/Info.plist`).
-5. Auf einem **echten iPhone** bauen und starten.
+```
+brew install xcodegen        # einmalig
+cd ios-writer
+xcodegen generate            # erzeugt AirlockWriter.xcodeproj
+open AirlockWriter.xcodeproj
+```
+
+Dann im Projekt unter **Signing & Capabilities** dein Apple-Team wählen (oder in
+`project.yml` `DEVELOPMENT_TEAM` setzen) und auf einem **echten iPhone** bauen.
+Die NFC-Capability (`NDEF` + `TAG`) und `NFCReaderUsageDescription` sind über
+`AirlockWriter.entitlements` bzw. `AirlockWriter/Info.plist` bereits gesetzt.
+
+> `AirlockWriter.xcodeproj` gehört nicht ins Git (regenerierbar) und ist in
+> `.gitignore` ausgenommen.
+
+### Alternative: von Hand anlegen
+
+1. Xcode → **File ▸ New ▸ Project… ▸ iOS ▸ App** (SwiftUI/Swift), Bundle-ID
+   `de.sweidinger.airlockwriter`.
+2. Die generierte `ContentView.swift`/`…App.swift` löschen, die Dateien aus
+   `AirlockWriter/` ins Projekt ziehen.
+3. **+ Capability ▸ Near Field Communication Tag Reading**; Entitlements mit
+   `AirlockWriter/AirlockWriter.entitlements` abgleichen.
+4. `INFOPLIST_FILE` auf `AirlockWriter/Info.plist` zeigen lassen (bzw.
+   `NFCReaderUsageDescription` setzen).
+5. Auf einem echten iPhone bauen.
 
 ## Einrichten & Benutzen
 

@@ -2,13 +2,35 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Pflicht für Core NFC: Begründung für den NFC-Zugriff (wird beim Scan gezeigt). -->
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Airlock Writer</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+
+	<!-- Pflicht fuer Core NFC: Begruendung fuer den NFC-Zugriff (wird beim Scan gezeigt). -->
 	<key>NFCReaderUsageDescription</key>
 	<string>Zum Beschreiben der Airlock-NFC-Tags.</string>
-
-	<!-- Optional: NDEF-Formate/AIDs. Für NTAG213/216 reicht der Standard-Tag-Zugriff.
-	     Beschränkt die App auf die für Airlock benötigten Tag-Typen. -->
-	<key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
-	<array/>
 </dict>
 </plist>
