@@ -120,7 +120,7 @@ function showView(name){
   const nk=$('#navKg'); if(nk) nk.classList.toggle('active', name==='kg');
   $('#navUpdates').classList.toggle('active', name==='updates');
   if(name==='updates'){ if(window._lastUpd) renderUpdatesPage(window._lastUpd); refreshUpdates(); }
-  if(name==='kg'){ refreshKgKeys(); refreshKgLog(); startKgAuto(); } else { stopKgAuto(); }
+  if(name==='kg'){ refreshNfcSecret(); refreshKgKeys(); refreshKgLog(); startKgAuto(); } else { stopKgAuto(); }
 }
 
 async function refreshStats(){
@@ -295,6 +295,57 @@ async function applyUpdate(){
   catch(e){ toast('Fehler: '+e.message,'err'); $('#applyUpdateBtn').disabled=false; $('#uApplyHint').textContent=''; }
 }
 
+// ---- NFC-Secret verwalten ----
+async function refreshNfcSecret(){
+  try{
+    const s = await api('/v1/nfc/secret/status');
+    let t;
+    if(s.source==='env') t = '<span class="ok">gesetzt (ENV-Override)</span>';
+    else if(s.source==='db') t = '<span class="ok">gesetzt (im Dashboard)</span>';
+    else t = '<span class="err">NICHT gesetzt — Default!</span>';
+    t += ` · ${s.bound_tags} Tag(s) gebunden`;
+    $('#nfcSecStatus').innerHTML = t;
+    const lock = !!s.env_override;
+    if($('#nfcSecGenBtn')){ $('#nfcSecGenBtn').disabled = lock;
+      $('#nfcSecGenBtn').title = lock ? 'Per ENV gesetzt — DB-Verwaltung deaktiviert' : ''; }
+    if($('#nfcSecRestoreBtn')) $('#nfcSecRestoreBtn').disabled = lock;
+  }catch(e){ if($('#nfcSecStatus')) $('#nfcSecStatus').innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+async function generateNfcSecret(){
+  let s={}; try{ s = await api('/v1/nfc/secret/status'); }catch(e){}
+  const warn = (s.bound_tags>0)
+    ? `ACHTUNG: ${s.bound_tags} Tag(s) sind bereits gebunden. Ein neues Secret macht ALLE bereits beschriebenen Tags UNGÜLTIG! Trotzdem fortfahren?`
+    : 'Neues NFC-Secret erzeugen und setzen?';
+  if(!confirm(warn)) return;
+  try{ const j=await api('/v1/nfc/secret/generate',{method:'POST',body:{confirm:true}});
+    $('#nfcSecNew').value=j.secret; $('#nfcSecNewBox').style.display='';
+    toast('Secret gesetzt — jetzt Backup exportieren!','ok'); refreshNfcSecret();
+  }catch(e){ toast('Fehler: '+e.message,'err'); }
+}
+async function exportNfcBackup(){
+  const pw = $('#nfcSecBkPw').value;
+  if(!pw){ toast('Backup-Passwort eingeben','err'); return; }
+  try{ const j=await api('/v1/nfc/secret/backup',{method:'POST',body:{password:pw}});
+    const blob = new Blob([j.backup], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=j.filename||'airlock-nfc-secret.backup.json'; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
+    $('#nfcSecBkPw').value=''; toast('Backup exportiert — sicher ablegen','ok');
+  }catch(e){ toast('Fehler: '+e.message,'err'); }
+}
+async function restoreNfcBackup(){
+  const f = ($('#nfcSecFile').files||[])[0]; const pw = $('#nfcSecRsPw').value;
+  if(!f){ toast('Backup-Datei wählen','err'); return; }
+  if(!pw){ toast('Passwort eingeben','err'); return; }
+  if(!confirm('Secret aus Backup wiederherstellen? Das ersetzt das aktuelle Secret.')) return;
+  try{
+    const text = await f.text();
+    await api('/v1/nfc/secret/restore',{method:'POST',body:{password:pw, backup:text, confirm:true}});
+    $('#nfcSecRsPw').value=''; $('#nfcSecFile').value='';
+    toast('Secret wiederhergestellt','ok'); refreshNfcSecret();
+  }catch(e){ toast('Fehler: '+e.message,'err'); }
+}
+
 // ---- KG-Tracker: eingeschränkte Keys + Debug-Log ----
 async function refreshKgKeys(){
   try{
@@ -404,6 +455,12 @@ if($('#kgNewKeyHide')) $('#kgNewKeyHide').onclick = ()=>{ $('#kgNewKeyBox').styl
 if($('#kgLogReload')) $('#kgLogReload').onclick = refreshKgLog;
 if($('#kgLogClear')) $('#kgLogClear').onclick = clearKgLog;
 if($('#kgAuto')) $('#kgAuto').onchange = startKgAuto;
+if($('#nfcSecGenBtn')) $('#nfcSecGenBtn').onclick = generateNfcSecret;
+if($('#nfcSecBackupBtn')) $('#nfcSecBackupBtn').onclick = exportNfcBackup;
+if($('#nfcSecRestoreBtn')) $('#nfcSecRestoreBtn').onclick = restoreNfcBackup;
+if($('#nfcSecNewCopy')) $('#nfcSecNewCopy').onclick = ()=>{ const t=$('#nfcSecNew').value;
+  if(t && navigator.clipboard){ navigator.clipboard.writeText(t); toast('Kopiert','ok'); } };
+if($('#nfcSecNewHide')) $('#nfcSecNewHide').onclick = ()=>{ $('#nfcSecNewBox').style.display='none'; $('#nfcSecNew').value=''; };
 $('#filterStatus').onchange = refreshAirlocks;
 $('#apiKey').addEventListener('keydown',e=>{if(e.key==='Enter')connect();});
 $('#baseUrl').value = localStorage.getItem('airlock_base')||'';
