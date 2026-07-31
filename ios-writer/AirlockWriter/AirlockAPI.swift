@@ -86,10 +86,12 @@ struct AirlockAPI {
         catch { throw APIError.decoding("\(error)") }
     }
 
+    /// Bindet die UID an den Code. `rebind=true` ersetzt bewusst eine bereits
+    /// bestehende Bindung (sonst antwortet der Server mit 409).
     @discardableResult
-    func commit(code: String, uid: String) async throws -> Data {
+    func commit(code: String, uid: String, rebind: Bool = false) async throws -> Data {
         let req = try makeRequest("/v1/airlocks/\(code)/nfc/commit",
-                                  method: "POST", body: ["uid": uid])
+                                  method: "POST", body: ["uid": uid, "rebind": rebind])
         return try await run(req)
     }
 }

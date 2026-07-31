@@ -71,16 +71,20 @@ function openNfcModal(code, boundUid){
   _nfcCode=code;
   $('#nfcTitle').textContent='NFC-Tag · '+code;
   $('#nfcUid').value=''; $('#nfcNdef').value=''; $('#nfcCommitBtn').disabled=true;
+  if($('#nfcRebind')) $('#nfcRebind').checked=false;
+  if($('#nfcRebindRow')) $('#nfcRebindRow').style.display = boundUid ? 'flex' : 'none';
   const web = ('NDEFReader' in window);
   $('#nfcWebRow').style.display = web?'':'none';
-  let s = boundUid ? `Gebunden an UID <span class="mono">${boundUid}</span> — erneutes Schreiben überschreibt die Bindung.`
+  let s = boundUid ? `Gebunden an UID <span class="mono">${boundUid}</span> — die Bindung ist <b>endgültig</b>. Zum Ersetzen unten „Neu verheiraten" ankreuzen.`
                    : 'Noch kein Tag gebunden.';
   if(!web) s += ' <span class="err">Web NFC hier nicht verfügbar — Fallback nutzen.</span>';
   $('#nfcState').innerHTML = s;
   $('#nfcModal').style.display='flex';
 }
+function _nfcRebind(){ return !!($('#nfcRebind') && $('#nfcRebind').checked); }
+function _nfcWarn(res){ if(res && res.warning) toast(res.warning,'err'); }
 async function nfcPrepare(uid){ return api(`/v1/airlocks/${_nfcCode}/nfc/prepare`,{method:'POST',body:{uid}}); }
-async function nfcCommit(uid){ return api(`/v1/airlocks/${_nfcCode}/nfc/commit`,{method:'POST',body:{uid}}); }
+async function nfcCommit(uid){ return api(`/v1/airlocks/${_nfcCode}/nfc/commit`,{method:'POST',body:{uid, rebind:_nfcRebind()}}); }
 async function nfcWebWrite(){
   if(!('NDEFReader' in window)){ toast('Web NFC nicht verfügbar','err'); return; }
   try{
@@ -96,7 +100,8 @@ async function nfcWebWrite(){
         const p = await nfcPrepare(uid);
         if(!p.secret_configured) toast('Warnung: NFC-Secret ist noch Default!','err');
         await reader.write({records:[{recordType:'text', data:p.ndef_text, lang:'de'}]});
-        await nfcCommit(p.uid);
+        const res = await nfcCommit(p.uid);
+        _nfcWarn(res);
         toast('Tag geschrieben & gebunden ✓ ('+p.uid+')','ok');
         closeNfc(); refreshAirlocks();
       }catch(e){ toast('Schreiben fehlgeschlagen: '+e.message,'err'); }
@@ -477,7 +482,7 @@ $('#nfcPrepBtn').onclick = async ()=>{ const uid=$('#nfcUid').value.trim();
 $('#nfcCopy').onclick = ()=>{ const t=$('#nfcNdef').value;
   if(t && navigator.clipboard){ navigator.clipboard.writeText(t); toast('Kopiert','ok'); } };
 $('#nfcCommitBtn').onclick = async ()=>{ const uid=$('#nfcUid').value.trim();
-  try{ await nfcCommit(uid); toast('Tag gebunden ✓','ok'); closeNfc(); refreshAirlocks(); }
+  try{ const res=await nfcCommit(uid); _nfcWarn(res); toast('Tag gebunden ✓','ok'); closeNfc(); refreshAirlocks(); }
   catch(e){ toast('Fehler: '+e.message,'err'); } };
 $('#navDashboard').onclick = ()=>showView('dashboard');
 $('#navUpdates').onclick = ()=>showView('updates');

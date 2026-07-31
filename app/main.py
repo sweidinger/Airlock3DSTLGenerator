@@ -319,19 +319,35 @@ def nfc_prepare(code: str, req: NfcPrepareRequest, svc: AirlockService = Depends
 
 
 @app.post("/v1/airlocks/{code}/nfc/commit", dependencies=[Depends(require_writer_access)], tags=["nfc"])
-def nfc_commit(code: str, req: NfcCommitRequest, svc: AirlockService = Depends(get_service)):
+def nfc_commit(code: str, req: NfcCommitRequest, response: Response,
+               svc: AirlockService = Depends(get_service)):
     code = _norm(code)
     try:
         uid = nfclib.normalize_uid(req.uid)
     except ValueError as e:
         raise HTTPException(422, str(e))
     try:
-        r = svc.registry.set_nfc(code, uid)
+        res = svc.registry.set_nfc(
+            code, uid, rebind=req.rebind, allow_tag_move=settings.beta_tag_move,
+        )
     except KeyError:
         raise HTTPException(404, f"Airlock {code} nicht gefunden.")
     except ValueError as e:
+        # TagBindingError erbt von ValueError -> Bindungskonflikt = 409.
         raise HTTPException(409, str(e))
-    return _airlock_row_to_out(r)
+    out = _airlock_row_to_out(res["row"])
+    warnings = []
+    if res["rebound"]:
+        warnings.append("Schloss wurde neu verheiratet – bestehende Tag-Bindung wurde ersetzt.")
+    if res["moved_from"]:
+        warnings.append(
+            f"Beta: Tag war an Schloss {res['moved_from']} gebunden und wurde von dort "
+            "geloest. Das andere Schloss hat jetzt keinen Tag mehr."
+        )
+    if warnings:
+        out["warning"] = " ".join(warnings)
+        response.headers["X-Airlock-Note"] = "rebind" + ("+move" if res["moved_from"] else "")
+    return out
 
 
 @app.post("/v1/airlocks/{code}/nfc/verify", dependencies=[Depends(require_kg_access)], tags=["nfc"])

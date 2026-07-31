@@ -26,16 +26,19 @@ final class NFCWriterService: NSObject, ObservableObject, NFCTagReaderSessionDel
     private var session: NFCTagReaderSession?
     private var api: AirlockAPI?
     private var code: String = ""
+    private var rebind: Bool = false
     private var continuation: CheckedContinuation<WriteResult, Error>?
 
     /// Startet eine Schreib-Sitzung und liefert bei Erfolg die gebundene UID.
-    func write(code: String, api: AirlockAPI) async throws -> WriteResult {
+    /// `rebind=true` ersetzt bewusst eine bereits bestehende Tag-Bindung.
+    func write(code: String, api: AirlockAPI, rebind: Bool = false) async throws -> WriteResult {
         guard NFCTagReaderSession.readingAvailable else {
             throw NSError(domain: "NFC", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "NFC ist auf diesem Gerät nicht verfügbar."])
         }
         self.api = api
         self.code = code
+        self.rebind = rebind
         return try await withCheckedThrowingContinuation { cont in
             self.continuation = cont
             let s = NFCTagReaderSession(pollingOption: .iso14443, delegate: self, queue: nil)
@@ -100,14 +103,17 @@ final class NFCWriterService: NSObject, ObservableObject, NFCTagReaderSessionDel
             try await writeNDEF(message, to: mifare)
 
             // Bindung erst NACH erfolgreichem Schreiben bestätigen.
-            try await api.commit(code: code, uid: payload.uid)
+            try await api.commit(code: code, uid: payload.uid, rebind: rebind)
 
             session.alertMessage = "Tag geschrieben ✓"
             session.invalidate()
             finish(.success(WriteResult(code: code, uid: payload.uid)))
         } catch {
             session.invalidate(errorMessage: "Fehler: \(error.localizedDescription)")
-            // finish() folgt über didInvalidateWithError.
+            // Original-Fehler (z. B. HTTP 409 „bereits verheiratet") direkt an den
+            // Aufrufer geben, damit die UI ein Neu-Verheiraten anbieten kann. Das
+            // spätere didInvalidateWithError findet die Continuation dann leer vor.
+            finish(.failure(error))
         }
     }
 

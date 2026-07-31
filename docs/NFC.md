@@ -48,9 +48,15 @@ API (voller Key): `GET /v1/nfc/secret/status`, `POST /v1/nfc/secret/generate`
   → `{"code","uid","token","ndef_text","secret_configured"}`.
   Liefert den zu schreibenden Payload (UID muss vorher bekannt sein, z. B. vom
   Reader gelesen).
-- `POST /v1/airlocks/{code}/nfc/commit`  Body `{"uid": "..."}`
-  → speichert die UID am Code (`nfc_uid`), Konflikt (409), wenn die UID schon an
-  einen anderen Code gebunden ist.
+- `POST /v1/airlocks/{code}/nfc/commit`  Body `{"uid": "...", "rebind": false}`
+  → speichert die UID am Code (`nfc_uid`). Eine Bindung ist **endgültig**:
+  - Ist der Code bereits mit einem **anderen** Tag verheiratet → **409**.
+    Erneutes Schreiben **desselben** Tags auf denselben Code ist erlaubt (idempotent).
+  - `rebind: true` ersetzt die bestehende Bindung bewusst durch einen neuen
+    (freien) Tag; die Antwort enthält dann ein `warning`.
+  - Hängt die UID noch an einem **anderen** Code, ist ein Umzug nur mit
+    `rebind: true` **und** gesetztem `AIRLOCK_BETA_TAG_MOVE=1` (Beta) möglich
+    (der Tag wird dort gelöst; `warning` weist darauf hin). Sonst → **409**.
 - `POST /v1/airlocks/{code}/nfc/verify`  Body `{"uid","token"}`
   → `{"valid": bool, "reason": "...", ...}`. Für den KG-Tracker.
 

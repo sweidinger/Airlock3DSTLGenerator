@@ -77,6 +77,15 @@ class Settings:
     # erzeugten Keys). Leer = nur die dynamisch erzeugten Keys gelten.
     kg_api_key: str = os.environ.get("AIRLOCK_KG_API_KEY", "")
 
+    # BETA: erlaubt beim bewussten Neu-Verheiraten (rebind=true) auch, einen Tag
+    # von einem ANDEREN Schloss "wegzunehmen" (dort loesen, hierher umbinden).
+    # Nur fuer die Beta-Phase gedacht — in Produktion AUS lassen, dann bleibt ein
+    # Tag dauerhaft an hoechstens einem Schloss. Der normale rebind (Ersetzen der
+    # Bindung eines Schlosses durch einen FREIEN Tag) haengt NICHT an diesem Flag.
+    beta_tag_move: bool = os.environ.get("AIRLOCK_BETA_TAG_MOVE", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
     profile: TemplateProfile = field(default_factory=TemplateProfile)
 
     @property

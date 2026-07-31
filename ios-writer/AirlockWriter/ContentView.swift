@@ -9,6 +9,8 @@ struct ContentView: View {
     @State private var message: String?
     @State private var isError = false
     @State private var showSettings = false
+    @State private var rebindLock: Airlock?
+    @State private var showRebind = false
 
     private var api: AirlockAPI { AirlockAPI(connection: settings.connection) }
 
@@ -29,6 +31,14 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showSettings) { SettingsView().environmentObject(settings) }
             .overlay(alignment: .bottom) { messageBar }
+            .alert("Neu verheiraten?", isPresented: $showRebind, presenting: rebindLock) { lock in
+                Button("Neu verheiraten", role: .destructive) {
+                    Task { await writeTag(for: lock, rebind: true) }
+                }
+                Button("Abbrechen", role: .cancel) {}
+            } message: { _ in
+                Text("Dieses Schloss oder der Tag ist bereits gebunden. Eine Bindung ist eigentlich endgültig — nur während der Beta lässt sie sich ersetzen.")
+            }
         }
         .task { await reload() }
     }
@@ -88,13 +98,19 @@ struct ContentView: View {
         catch { show(error.localizedDescription, error: true) }
     }
 
-    private func writeTag(for lock: Airlock) async {
+    private func writeTag(for lock: Airlock, rebind: Bool = false) async {
         do {
-            let result = try await writer.write(code: lock.code, api: api)
+            let result = try await writer.write(code: lock.code, api: api, rebind: rebind)
             show("Tag geschrieben & gebunden ✓ (\(result.uid))", error: false)
             await reload()
         } catch {
-            show(error.localizedDescription, error: true)
+            // 409 = Schloss/Tag schon gebunden -> Neu-Verheiraten anbieten (Beta).
+            if case let APIError.http(status, _) = error, status == 409, !rebind {
+                rebindLock = lock
+                showRebind = true
+            } else {
+                show(error.localizedDescription, error: true)
+            }
         }
     }
 

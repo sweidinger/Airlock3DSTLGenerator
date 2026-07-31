@@ -31,6 +31,18 @@ class CodeExhaustionError(RuntimeError):
     """Kein freier Code mehr im Nummernraum verfuegbar."""
 
 
+class TagBindingError(ValueError):
+    """Tag-/Schloss-Bindungskonflikt (fuehrt in der API zu HTTP 409).
+
+    Faelle:
+      * Das Schloss ist bereits mit einem anderen Tag 'verheiratet' und
+        `rebind` wurde nicht gesetzt (Bindung ist endgueltig).
+      * Die Tag-UID haengt noch an einem anderen Schloss und ein Umzug ist
+        nicht erlaubt (kein `rebind` bzw. Beta-Umzug aus).
+    Erbt von ValueError, damit bestehende Handler es weiter als 409 behandeln.
+    """
+
+
 class Registry:
     def __init__(self, db_path: str | Path, code_length: int = 5):
         self.db_path = Path(db_path)
@@ -210,23 +222,63 @@ class Registry:
             "SELECT * FROM airlocks WHERE nfc_uid = ?", (uid,)
         ).fetchone()
 
-    def set_nfc(self, code: str, uid: str) -> sqlite3.Row:
-        """Bindet eine Tag-UID an einen Code und hebt den Status auf 'registered'
-        an, sofern der Code noch auf einer Vorstufe steht (reserved/generated/
-        printed). Bereits 'registered'/'active' bleibt unveraendert; terminale
-        Status (retired/voided) werden nicht angetastet. Fehler bei Konflikt/
-        Unbekannt."""
+    def set_nfc(self, code: str, uid: str, rebind: bool = False,
+                allow_tag_move: bool = False) -> dict:
+        """Bindet eine Tag-UID an einen Code ('verheiraten').
+
+        Grundregel (Produktion): Eine Bindung ist **endgueltig**. Ist der Code
+        bereits mit einem anderen Tag verheiratet, wird abgelehnt.
+
+        - `rebind=True` erlaubt bewusst das Neu-Verheiraten: die bestehende
+          Bindung wird durch den neuen Tag ersetzt.
+        - Haengt der Tag noch an einem ANDEREN Schloss, ist das nur mit
+          `rebind=True` UND `allow_tag_move=True` (Beta) moeglich; der Tag wird
+          dann dort geloest und hierher umgebunden.
+
+        Statuslogik unveraendert: Vorstufe (reserved/generated/printed) ->
+        'registered'; registered/active bleibt, terminale (retired/voided)
+        werden nicht angetastet.
+
+        Rueckgabe: ``{"row", "rebound", "moved_from"}`` –
+        `rebound`=True wenn eine bestehende Bindung ersetzt wurde,
+        `moved_from`=Code, von dem der Tag weggenommen wurde (oder None).
+        Wirft ``KeyError`` (unbekannt) bzw. ``TagBindingError`` (Konflikt).
+        """
         with self._lock, self._conn:
             row = self._conn.execute(
-                "SELECT code, status FROM airlocks WHERE code=?", (code,)
+                "SELECT code, status, nfc_uid FROM airlocks WHERE code=?", (code,)
             ).fetchone()
             if row is None:
                 raise KeyError(code)
+            current = row["nfc_uid"]
+            rebound = False
+            moved_from = None
+
+            # Schloss ist bereits mit einem ANDEREN Tag verheiratet.
+            if current and current != uid:
+                if not rebind:
+                    raise TagBindingError(
+                        f"Schloss {code} ist bereits mit Tag {current} verheiratet. "
+                        "Die Bindung ist endgueltig – zum Neu-Verheiraten 'rebind' setzen."
+                    )
+                rebound = True
+
+            # Tag haengt (noch) an einem ANDEREN Schloss.
             other = self._conn.execute(
                 "SELECT code FROM airlocks WHERE nfc_uid=? AND code<>?", (uid, code)
             ).fetchone()
             if other is not None:
-                raise ValueError(f"Tag-UID bereits an Code {other['code']} gebunden.")
+                if not (rebind and allow_tag_move):
+                    raise TagBindingError(
+                        f"Tag-UID bereits an Schloss {other['code']} gebunden."
+                    )
+                # Beta-Umzug: Tag am bisherigen Schloss loesen.
+                moved_from = other["code"]
+                self._conn.execute(
+                    "UPDATE airlocks SET nfc_uid=NULL, nfc_written_at=NULL WHERE code=?",
+                    (moved_from,),
+                )
+
             if row["status"] in _NFC_PROMOTE_FROM:
                 self._conn.execute(
                     "UPDATE airlocks SET nfc_uid=?, nfc_written_at=?, status='registered'"
@@ -238,7 +290,8 @@ class Registry:
                     "UPDATE airlocks SET nfc_uid=?, nfc_written_at=? WHERE code=?",
                     (uid, _now(), code),
                 )
-        return self.get_airlock(code)
+        return {"row": self.get_airlock(code), "rebound": rebound,
+                "moved_from": moved_from}
 
     # ---- KG-Tracker-API-Keys -----------------------------------------
     def create_kg_key(self, key_id: str, name: str, key_hash: str,

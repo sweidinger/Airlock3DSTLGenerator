@@ -3,6 +3,24 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.9.0] - 2026-07-31
+### Geändert
+- **Tag-Bindung ist jetzt endgültig** („einmal verheiratet, bleibt verheiratet"):
+  Ist ein Schloss bereits mit einem Tag gebunden, lehnt `nfc/commit` das Binden
+  eines anderen Tags mit **409** ab. Das erneute Schreiben desselben Tags auf
+  dasselbe Schloss bleibt erlaubt (idempotent).
+### Hinzugefügt
+- **Bewusstes Neu-Verheiraten** über `rebind: true` im Body von `nfc/commit`:
+  ersetzt die bestehende Bindung eines Schlosses durch einen neuen (freien) Tag.
+  Die Antwort enthält dann ein `warning`. Im Dashboard gibt es dafür im
+  NFC-Dialog die Checkbox „Neu verheiraten"; die iOS-Writer-App bietet bei 409
+  einen Bestätigungsdialog an.
+- **Beta-Tag-Umzug** (`AIRLOCK_BETA_TAG_MOVE=1`): erlaubt beim Neu-Verheiraten
+  zusätzlich, einen Tag, der noch an einem **anderen** Schloss hängt, dort zu
+  lösen und umzubinden (mit deutlichem Hinweis in `warning`). Nur für die
+  Beta-Phase gedacht — ohne das Flag bleibt ein Tag dauerhaft an höchstens einem
+  Schloss (Umzugsversuch → 409).
+
 ## [1.8.1] - 2026-07-31
 ### Geändert
 - `nfc/commit` (Tag beschreiben – auch aus der nativen iOS-Writer-App) hebt den

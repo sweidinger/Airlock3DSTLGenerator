@@ -75,6 +75,12 @@ class NfcPrepareRequest(BaseModel):
 class NfcCommitRequest(BaseModel):
     """Bestätigt, dass der Tag mit dieser UID beschrieben wurde."""
     uid: str = Field(description="Tag-UID (Hex)")
+    rebind: bool = Field(
+        default=False,
+        description="Bewusstes Neu-Verheiraten: ersetzt eine bereits bestehende "
+                    "Tag-Bindung dieses Schlosses. Ohne rebind ist eine Bindung "
+                    "endgültig (409).",
+    )
 
 
 class NfcVerifyRequest(BaseModel):

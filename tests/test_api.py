@@ -493,3 +493,78 @@ def test_writer_key_in_debug_log():
     entries = client.get("/v1/kg/log", headers=AUTH).json()["entries"]
     assert any(e["path"] == "/v1/airlocks" and e["key_name"] == "LogWriter" for e in entries)
     assert wrkey not in _json.dumps(entries)
+
+
+def test_nfc_marriage_permanent_and_rebind():
+    b = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()
+    code = b["airlocks"][0]["code"]
+    uid_x = "04AA11BB22CC80"
+    uid_y = "04DD33EE44FF80"
+
+    # Erstbindung -> ok, Status auf registered gehoben
+    r = client.post(f"/v1/airlocks/{code}/nfc/commit", json={"uid": uid_x}, headers=AUTH)
+    assert r.status_code == 200 and r.json()["nfc_uid"] == uid_x
+    assert r.json()["status"] == "registered"
+    assert "warning" not in r.json()
+
+    # Anderer Tag OHNE rebind -> Bindung ist endgueltig -> 409
+    assert client.post(f"/v1/airlocks/{code}/nfc/commit",
+                       json={"uid": uid_y}, headers=AUTH).status_code == 409
+
+    # Gleicher Tag nochmal -> idempotent ok (dieselbe Ehe)
+    assert client.post(f"/v1/airlocks/{code}/nfc/commit",
+                       json={"uid": uid_x}, headers=AUTH).status_code == 200
+
+    # Bewusstes Neu-Verheiraten mit freiem Tag -> ersetzt Bindung, mit Warnung
+    r2 = client.post(f"/v1/airlocks/{code}/nfc/commit",
+                     json={"uid": uid_y, "rebind": True}, headers=AUTH)
+    assert r2.status_code == 200 and r2.json()["nfc_uid"] == uid_y
+    assert "warning" in r2.json()
+
+    # Tag von einem anderen Schloss "wegnehmen" ist ohne Beta-Flag verboten,
+    # auch mit rebind (uid_y haengt jetzt an `code`).
+    b2 = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()
+    code2 = b2["airlocks"][0]["code"]
+    assert client.post(f"/v1/airlocks/{code2}/nfc/commit",
+                       json={"uid": uid_y, "rebind": True}, headers=AUTH).status_code == 409
+
+
+def test_registry_rebind_and_tag_move(tmp_path):
+    import pytest
+
+    from app.registry import Registry, TagBindingError
+
+    reg = Registry(tmp_path / "r.db", code_length=5)
+    reg.create_batch("bb", 2, "test", None)
+    reg.add_airlock("11111", "bb", "auto", None)
+    reg.add_airlock("22222", "bb", "auto", None)
+
+    uid_a = "04AABBCCDDEE80"
+    uid_b = "04FF00112233A0"
+
+    res = reg.set_nfc("11111", uid_a)
+    assert res["row"]["status"] == "registered"
+    assert res["row"]["nfc_uid"] == uid_a
+    assert res["rebound"] is False and res["moved_from"] is None
+
+    # gleiche UID erneut -> idempotent, kein Fehler
+    reg.set_nfc("11111", uid_a)
+
+    # andere UID ohne rebind -> Konflikt
+    with pytest.raises(TagBindingError):
+        reg.set_nfc("11111", uid_b)
+
+    # andere (freie) UID mit rebind -> ersetzt, rebound=True
+    res2 = reg.set_nfc("11111", uid_b, rebind=True)
+    assert res2["rebound"] is True and res2["row"]["nfc_uid"] == uid_b
+
+    # uid_b haengt jetzt an 11111; Umzug nach 22222 ohne Beta -> verboten
+    with pytest.raises(TagBindingError):
+        reg.set_nfc("22222", uid_b, rebind=True, allow_tag_move=False)
+
+    # mit Beta-Umzug -> Tag wandert, 11111 verliert ihn
+    res3 = reg.set_nfc("22222", uid_b, rebind=True, allow_tag_move=True)
+    assert res3["moved_from"] == "11111"
+    assert reg.get_airlock("22222")["nfc_uid"] == uid_b
+    assert reg.get_airlock("11111")["nfc_uid"] is None
+    reg.close()
