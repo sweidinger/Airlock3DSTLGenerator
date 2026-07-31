@@ -35,6 +35,36 @@ struct PreparePayload: Codable {
     }
 }
 
+/// Antwort von `POST /v1/airlocks/{code}/nfc/verify` (Server prüft Signatur/UID/Status).
+struct VerifyResult: Codable {
+    let valid: Bool
+    let reason: String?
+    let code: String?
+    let uid: String?
+    let status: String?
+    let boundUid: String?
+
+    enum CodingKeys: String, CodingKey {
+        case valid, reason, code, uid, status
+        case boundUid = "bound_uid"
+    }
+}
+
+/// Ergebnis des „Tag prüfen"-Rücklesens: was steht (roh und dekodiert) auf dem
+/// Tag, wie wurde es geparst und was sagt der Server dazu.
+struct TagReport: Identifiable {
+    let id = UUID()
+    let uid: String
+    let ndefFound: Bool
+    let recordType: String
+    let decodedText: String?
+    let rawHex: String
+    let code: String?
+    let token: String?
+    let server: VerifyResult?
+    let note: String?
+}
+
 /// Verbindungs-/Zugangsdaten (Basis-URL + Writer-Key).
 struct Connection {
     var baseURL: String      // z. B. https://10.0.1.9:8453

@@ -94,4 +94,14 @@ struct AirlockAPI {
                                   method: "POST", body: ["uid": uid, "rebind": rebind])
         return try await run(req)
     }
+
+    /// Prüft einen gelesenen Tag serverseitig (Signatur/UID/Status). Seit
+    /// Generator v1.10.0 darf das auch der Writer-Key.
+    func verify(code: String, uid: String, token: String) async throws -> VerifyResult {
+        let req = try makeRequest("/v1/airlocks/\(code)/nfc/verify",
+                                  method: "POST", body: ["uid": uid, "token": token])
+        let data = try await run(req)
+        do { return try JSONDecoder().decode(VerifyResult.self, from: data) }
+        catch { throw APIError.decoding("\(error)") }
+    }
 }

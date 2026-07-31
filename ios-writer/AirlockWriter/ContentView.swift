@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var settings: SettingsStore
     @StateObject private var writer = NFCWriterService()
+    @StateObject private var reader = NFCReaderService()
 
     @State private var airlocks: [Airlock] = []
     @State private var loading = false
@@ -11,6 +12,7 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var rebindLock: Airlock?
     @State private var showRebind = false
+    @State private var report: TagReport?
 
     private var api: AirlockAPI { AirlockAPI(connection: settings.connection) }
 
@@ -25,11 +27,18 @@ struct ContentView: View {
             }
             .navigationTitle("Airlock Writer")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { Task { await verifyTag() } } label: {
+                        Label("Tag prüfen", systemImage: "magnifyingglass")
+                    }
+                    .disabled(!settings.connection.isConfigured)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: { Image(systemName: "gearshape") }
                 }
             }
             .sheet(isPresented: $showSettings) { SettingsView().environmentObject(settings) }
+            .sheet(item: $report) { rep in TagReportView(report: rep) }
             .overlay(alignment: .bottom) { messageBar }
             .alert("Neu verheiraten?", isPresented: $showRebind, presenting: rebindLock) { lock in
                 Button("Neu verheiraten", role: .destructive) {
@@ -73,6 +82,8 @@ struct ContentView: View {
                 }
             } header: {
                 Text("\(airlocks.count) Airlock(s)")
+            } footer: {
+                Text("Tag prüfen (oben links): liest einen beliebigen Tag zurück und zeigt, was draufsteht + Server-Verifikation.")
             }
         }
         .refreshable { await reload() }
@@ -114,11 +125,75 @@ struct ContentView: View {
         }
     }
 
+    private func verifyTag() async {
+        do {
+            report = try await reader.read(api: api)
+        } catch {
+            show(error.localizedDescription, error: true)
+        }
+    }
+
     private func show(_ text: String, error: Bool) {
         withAnimation { message = text; isError = error }
         Task {
             try? await Task.sleep(nanoseconds: 3_500_000_000)
             withAnimation { if message == text { message = nil } }
+        }
+    }
+}
+
+/// Zeigt den Prüfbericht eines zurückgelesenen Tags als Log (roh + dekodiert +
+/// Server-Verifikation).
+struct TagReportView: View {
+    let report: TagReport
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Server-Prüfung") {
+                    if let s = report.server {
+                        Label(s.valid ? "gültig ✓" : "ungültig ✗",
+                              systemImage: s.valid ? "checkmark.seal.fill" : "xmark.seal.fill")
+                            .foregroundStyle(s.valid ? .green : .red)
+                            .font(.headline)
+                        if let c = s.code ?? report.code { row("Code", c) }
+                        if let st = s.status { row("Status", st) }
+                        if let r = s.reason { row("Grund", r) }
+                        if let b = s.boundUid { row("gebundene UID", b) }
+                    } else {
+                        Text(report.note ?? "Nicht verifizierbar (kein AL1-Record gefunden).")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Section("Tag-Inhalt") {
+                    row("UID (Hardware)", report.uid)
+                    row("NDEF-Record", report.recordType)
+                    if let t = report.decodedText { row("Text (dekodiert)", t) }
+                    if let c = report.code { row("Code", c) }
+                    if let tok = report.token { row("Token", tok) }
+                    if !report.rawHex.isEmpty { row("Roh-Payload (hex)", report.rawHex) }
+                }
+
+                if let note = report.note, report.server != nil {
+                    Section { Text(note).font(.caption).foregroundStyle(.secondary) }
+                }
+            }
+            .navigationTitle("Tag-Prüfung")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Fertig") { dismiss() } }
+            }
+        }
+    }
+
+    @ViewBuilder private func row(_ key: String, _ value: String) -> some View {
+        HStack(alignment: .top) {
+            Text(key).foregroundStyle(.secondary)
+            Spacer()
+            Text(value).font(.footnote.monospaced()).multilineTextAlignment(.trailing)
+                .textSelection(.enabled)
         }
     }
 }
