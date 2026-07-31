@@ -72,7 +72,15 @@ final class NFCReaderService: NSObject, ObservableObject, NFCTagReaderSessionDel
             var recordType = "keine NDEF-Nachricht"
             var decoded: String? = nil
             var rawHex = ""
-            if let rec = message?.records.first {
+            // Gezielt den Well-Known-Text-Record ("T") waehlen. Seit v1.11.0 traegt der
+            // Tag ggf. ZUERST einen URI-Record (Universal Link) und danach den Text-
+            // Record AL1|code|token. Ein naiver .first griffe faelschlich die URI und
+            // meldete faelschlich "Kein gueltiger AL1|code|token-Record".
+            let allRecords = message?.records ?? []
+            let textRecord = allRecords.first(where: {
+                $0.typeNameFormat == .nfcWellKnown && String(data: $0.type, encoding: .utf8) == "T"
+            })
+            if let rec = textRecord ?? allRecords.first {
                 rawHex = rec.payload.map { String(format: "%02X", $0) }.joined(separator: " ")
                 recordType = describe(rec)
                 // SAUBER: Well-Known-Text-Record korrekt dekodieren (Header abgeschnitten).
