@@ -3,10 +3,11 @@
 <plist version="1.0">
 <dict>
 	<!-- Capability „Near Field Communication Tag Reading".
-	     NDEF = NDEF lesen/schreiben, TAG = roher Tag-Zugriff (für die UID). -->
+	     Nur TAG: wir nutzen NFCTagReaderSession (roher Tag-Zugriff + NDEF-Schreiben
+	     ueber den Tag). Das Format NDEF ist nur fuer NFCNDEFReaderSession und wird
+	     vom neueren SDK zusammen mit min iOS 17 abgelehnt ("NDEF is disallowed"). -->
 	<key>com.apple.developer.nfc.readersession.formats</key>
 	<array>
-		<string>NDEF</string>
 		<string>TAG</string>
 	</array>
 </dict>
