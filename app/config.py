@@ -86,6 +86,10 @@ class Settings:
         "1", "true", "yes", "on",
     )
 
+    # Basis-URL fuer den optionalen Tag-URL-Record (Universal Link -> KG-Tracker).
+    # Leer = kein URL-Record (nur Text-Record, Alt-Verhalten).
+    tag_url_base: str = os.environ.get("AIRLOCK_TAG_URL_BASE", "")
+
     profile: TemplateProfile = field(default_factory=TemplateProfile)
 
     @property

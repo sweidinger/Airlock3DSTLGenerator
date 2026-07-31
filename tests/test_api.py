@@ -648,3 +648,20 @@ def test_status_history():
 
     # history braucht Lesezugriff
     assert client.get(f"/v1/airlocks/{code}/history").status_code == 401
+
+
+def test_nfc_prepare_url_record():
+    """prepare liefert das url-Feld: leer ohne Basis, sonst <base>/t/<code>."""
+    import app.main as m
+    code = _printed_code()
+    uid = "04:11:22:33:44:55:80"
+    p = client.post(f"/v1/airlocks/{code}/nfc/prepare", json={"uid": uid}, headers=AUTH)
+    assert p.status_code == 200, p.text
+    assert p.json().get("url") == ""          # keine Basis gesetzt -> leer (Alt-Verhalten)
+
+    object.__setattr__(m.settings, "tag_url_base", "https://nfc.neurorelatepoly.app/")
+    try:
+        p2 = client.post(f"/v1/airlocks/{code}/nfc/prepare", json={"uid": uid}, headers=AUTH).json()
+        assert p2["url"] == f"https://nfc.neurorelatepoly.app/t/{code}"   # rstrip("/") greift
+    finally:
+        object.__setattr__(m.settings, "tag_url_base", "")

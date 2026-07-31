@@ -92,12 +92,20 @@ final class NFCWriterService: NSObject, ObservableObject, NFCTagReaderSessionDel
                 session.invalidate(errorMessage: "Achtung: NFC-Secret ist noch Default – erst im Dashboard setzen.")
                 return
             }
-            guard let record = NFCNDEFPayload.wellKnownTypeTextPayload(
+            var records: [NFCNDEFPayload] = []
+            // Record 0: URI (fuer iOS Background-Reading) — nur wenn der Server eine URL liefert.
+            if let urlString = payload.url, !urlString.isEmpty,
+               let uriRecord = NFCNDEFPayload.wellKnownTypeURIPayload(string: urlString) {
+                records.append(uriRecord)
+            }
+            // Record 1: Text "AL1|code|token" (Echtheit) — Pflicht.
+            guard let textRecord = NFCNDEFPayload.wellKnownTypeTextPayload(
                 string: payload.ndefText, locale: Locale(identifier: "de")) else {
                 session.invalidate(errorMessage: "NDEF-Record konnte nicht gebaut werden.")
                 return
             }
-            let message = NFCNDEFMessage(records: [record])
+            records.append(textRecord)
+            let message = NFCNDEFMessage(records: records)
 
             session.alertMessage = "Schreibe Tag…"
             try await writeNDEF(message, to: mifare)

@@ -13,6 +13,7 @@ services:
       - AIRLOCK_MAX_BATCH=${AIRLOCK_MAX_BATCH:-200}
       - AIRLOCK_UI_AUTOKEY=${AIRLOCK_UI_AUTOKEY:-0}
       - AIRLOCK_BETA_TAG_MOVE=${AIRLOCK_BETA_TAG_MOVE:-0}
+      - AIRLOCK_TAG_URL_BASE=${AIRLOCK_TAG_URL_BASE:-https://nfc.neurorelatepoly.app}
       - AIRLOCK_OUTPUT_DIR=/app/output
       - AIRLOCK_DB_PATH=/app/data/registry.db
       - AIRLOCK_CONTROL_DIR=/app/control

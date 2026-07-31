@@ -3,6 +3,19 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.11.0] - 2026-07-31
+### Hinzugefügt
+- **Universal-Link-Record auf dem Tag**: `nfc/prepare` liefert zusätzlich ein
+  Feld `url` (`<AIRLOCK_TAG_URL_BASE>/t/<code>`). Ist `AIRLOCK_TAG_URL_BASE`
+  gesetzt, schreibt die Writer-App einen zweiten NDEF-Record (URI **zuerst**,
+  danach der bestehende Text-Record `AL1|code|token`). Damit kann ein Antippen
+  des Tags die KG-Tracker-App über einen Universal Link öffnen. Rückwärts-
+  kompatibel: ohne Basis bleibt es beim reinen Text-Record; Reader ignorieren
+  den URI-Record (Suche über Well-Known-Typ „T").
+### Konfiguration
+- Neue Env-Variable `AIRLOCK_TAG_URL_BASE` (im `environment:`-Block der
+  docker-compose.yml, Default `https://nfc.neurorelatepoly.app`).
+
 ## [1.10.0] - 2026-07-31
 ### Hinzugefügt
 - **Erzwungener Status-Lebenszyklus**: Statuswechsel folgen jetzt der

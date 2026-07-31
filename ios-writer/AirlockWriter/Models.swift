@@ -27,9 +27,10 @@ struct PreparePayload: Codable {
     let token: String
     let ndefText: String     // exakt dieser String kommt auf den Tag: "AL1|code|token"
     let secretConfigured: Bool
+    let url: String?          // optionaler Universal-Link-URL-Record (Tag Record 0)
 
     enum CodingKeys: String, CodingKey {
-        case code, uid, token
+        case code, uid, token, url
         case ndefText = "ndef_text"
         case secretConfigured = "secret_configured"
     }

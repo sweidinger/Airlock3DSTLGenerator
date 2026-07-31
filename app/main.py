@@ -343,6 +343,8 @@ def nfc_prepare(code: str, req: NfcPrepareRequest, svc: AirlockService = Depends
     except ValueError as e:
         raise HTTPException(422, str(e))
     payload["secret_configured"] = not nfclib.secret_is_default(secret)
+    base = settings.tag_url_base.rstrip("/")
+    payload["url"] = f"{base}/t/{code}" if base else ""
     return payload
 
 
