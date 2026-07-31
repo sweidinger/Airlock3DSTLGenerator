@@ -34,6 +34,17 @@ module code_solid() {
             linear_extrude(height = depth + sink)
                 text(code, size = size, font = font,
                      halign = "{{ halign }}", valign = "{{ valign }}");
+{% if frame_enable %}
+    // Weisser Rahmen am Tag-Taschenrand (Code-Farbe): duenner Ring rund um die
+    // Taschenoeffnung, endet an der Pausenebene -> bei der 3-mm-Pause sichtbare
+    // Markierung fuers Einlegen des Tags. Wird beim Weiterdrucken ueberdeckt.
+    translate([tx, ty, {{ frame_z0 }}])
+        linear_extrude(height = {{ frame_z1 }} - ({{ frame_z0 }}))
+            difference() {
+                square([{{ frame_out_x }}, {{ frame_out_y }}], center = true);
+                square([{{ frame_in_x }}, {{ frame_in_y }}], center = true);
+            }
+{% endif %}
 }
 
 if (part == "code") {

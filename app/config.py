@@ -49,6 +49,15 @@ class TemplateProfile:
     # erwartete Ausgabemasse (fuer Plausibilitaetscheck)
     expected_bounds_max: tuple[float, float, float] = (39.9, 55.854, 4.0)
 
+    # Weisser Rahmen am Tag-Taschenrand (Pausenhilfe, Code-/Nummern-Farbe).
+    # Sichtbar bei der 3-mm-Pause -> zeigt exakt, wo der NFC-Tag hin soll.
+    # Liegt in normalisierten Z knapp unter der Pausenebene (3.0) und wird beim
+    # Weiterdrucken vom Korpus ueberdeckt (reine Positionierhilfe). Zentrum = tx/ty.
+    frame_enable: bool = True
+    frame_inner: tuple[float, float] = (19.8, 12.8)   # innen: 0,2 mm/Seite ausserhalb der Tasche (19,4) -> keine koinzidenten Flaechen
+    frame_width: float = 0.8                          # Rahmenbreite je Seite
+    frame_z: tuple[float, float] = (2.6, 3.0)         # normalisierte Z (Oberkante an Pausenebene 3.0)
+
 
 @dataclass(frozen=True)
 class Settings:

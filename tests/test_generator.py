@@ -59,17 +59,20 @@ def test_render_matches_sample(tmp_path):
         assert abs(ghi[i] - SAMPLE_BOUNDS_MAX[i]) < 0.05, f"max[{i}] {ghi[i]}"
         assert abs(glo[i] - SAMPLE_BOUNDS_MIN[i]) < 0.05, f"min[{i}] {glo[i]}"
 
-    # Buendige Praegung im Zahlenfeld: das Code-Volumen allein pruefen.
+    # Code-Volumen (Nummer + weisser Tag-Rahmen) pruefen.
     codeout = tmp_path / "code.stl"
     Generator().render("73412", out_path=codeout, part="code")
     clo, chi, _ = _stl_bounds(codeout)
-    # Ziffern enden buendig mit der Oberflaeche (z ~ 4.0) und sinken in den Feldboden.
+    # Ziffern enden buendig mit der Oberflaeche (z ~ 4.0); der Rahmen sitzt tiefer
+    # am Taschenrand (bei ~2.6 unter der Pausenebene) -> zmin deutlich unter 3.4.
     assert 3.9 < chi[2] <= 4.02, f"Ziffern nicht buendig (zmax={chi[2]})"
-    assert clo[2] < 3.4, f"Ziffern sinken nicht in den Feldboden (zmin={clo[2]})"
-    # Text sitzt zentriert im Zahlenfeld (Zentrum ~ 11.30 / 14.17), Breite < 19 mm.
-    assert 3.0 < (chi[0] - clo[0]) < 19.0 and 3.0 < (chi[1] - clo[1]) < 12.0
-    assert abs((chi[0] + clo[0]) / 2 - 11.30) < 1.5, "Text nicht in Feldmitte (X)"
-    assert abs((chi[1] + clo[1]) / 2 - 14.17) < 1.5, "Text nicht in Feldmitte (Y)"
+    assert clo[2] < 3.4, f"Code sinkt nicht in den Feldboden/Rahmen fehlt (zmin={clo[2]})"
+    # Rahmen vorhanden: Code-Geometrie an der Taschenrand-Ebene (~2.6-3.0).
+    assert clo[2] < 2.7, f"Tag-Rahmen fehlt (erwartet Geometrie bei ~2.6, zmin={clo[2]})"
+    # Code zentriert (Zentrum ~ 11.30 / 14.17); Ausdehnung <= Rahmen-Aussenmass (~21.4 x 14.4).
+    assert 3.0 < (chi[0] - clo[0]) < 23.0 and 3.0 < (chi[1] - clo[1]) < 16.0
+    assert abs((chi[0] + clo[0]) / 2 - 11.30) < 1.5, "Code nicht in Feldmitte (X)"
+    assert abs((chi[1] + clo[1]) / 2 - 14.17) < 1.5, "Code nicht in Feldmitte (Y)"
 
 
 def test_deterministic(tmp_path):

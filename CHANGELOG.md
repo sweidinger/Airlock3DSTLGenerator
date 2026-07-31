@@ -3,6 +3,22 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.15.0] - 2026-07-31
+### Geändert
+- **Tag-Tasche tiefer gelegt** (NTAG213-Vorlage V2): Boden von Druckhöhe 2,79 auf
+  2,44 mm → Schlitz jetzt **0,56 mm** (vorher 0,21) für den 0,19-mm-Tag, ~0,3 mm
+  Luft zum Deckel. Behebt das Aufreißen des Nummernfeld-Deckels beim Überbrücken
+  über den zu hoch sitzenden Tag. Pause bleibt bei 3 mm. XY-Toleranz 19,4 × 12,4
+  (0,2 mm/Seite) beibehalten; Vorlage wasserdicht aus STEP tesselliert.
+### Hinzugefügt
+- **Weißer Tag-Rahmen** (Positionierhilfe): dünner Ring in der Code-/Nummern-Farbe
+  am Tag-Taschenrand, endet an der Pausenebene (3 mm) → bei der Druckpause sichtbare
+  weiße Markierung, die exakt zeigt, wo der NFC-Tag eingelegt wird; wird beim
+  Weiterdrucken vom Korpus überdeckt. Neue `TemplateProfile`-Parameter
+  `frame_enable/frame_inner/frame_width/frame_z`; im SCAD-Template als Code-Geometrie,
+  damit er automatisch in der Nummern-Farbe druckt. Trade-off: ein zusätzlicher
+  Weiß↔Schwarz-Farbwechsel rund um die Pause.
+
 ## [1.13.0] - 2026-07-31
 ### Hinzugefügt
 - **Druckfertiger P1S-Projekt-Export** (`format: "p1s"` bei `POST /v1/airlocks:threemf`,
