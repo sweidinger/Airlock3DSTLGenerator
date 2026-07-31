@@ -665,3 +665,95 @@ def test_nfc_prepare_url_record():
         assert p2["url"] == f"https://nfc.neurorelatepoly.app/t/{code}"   # rstrip("/") greift
     finally:
         object.__setattr__(m.settings, "tag_url_base", "")
+
+
+# ---- Kamera-Verifikation: mark-printed + Foto-Beleg ------------------
+from app import writerkeys as _wk           # noqa: E402
+from app.main import get_service as _get_service  # noqa: E402
+
+# Fake-JPEG-Bytes — der Content-Type kommt aus dem multipart-Header, nicht aus
+# den Bytes, daher reicht ein plausibler JPEG-Anfang.
+_JPEG = b"\xff\xd8\xff\xe0" + b"AirlockProof" * 8
+
+
+def _writer_headers():
+    """Erzeugt einen echten Writer-Key in der Test-DB und gibt den Auth-Header."""
+    raw, kh, pref = _wk.new_key()
+    _get_service().registry.create_writer_key(_wk.new_id(), "test-writer", kh, pref)
+    return {"X-API-Key": raw}
+
+
+def _generated_code():
+    """Frisch generiertes Lock -> Status 'generated' (druckbar)."""
+    return client.post("/v1/airlocks:generate", json={"count": 1},
+                       headers=AUTH).json()["airlocks"][0]["code"]
+
+
+def test_mark_printed_writer_and_proof():
+    W = _writer_headers()
+    code = _generated_code()
+    r = client.post(f"/v1/airlocks/{code}/mark-printed",
+                    files={"photo": (f"{code}.jpg", _JPEG, "image/jpeg")}, headers=W)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "printed"
+    # Verlauf zeigt den app-Uebergang generated -> printed
+    hist = client.get(f"/v1/airlocks/{code}/history", headers=AUTH).json()
+    assert any(e["to"] == "printed" and e["source"] == "app" for e in hist)
+    # Beleg abrufbar (read-scoped: Writer-Key + voller Key), byte-genau
+    g = client.get(f"/v1/airlocks/{code}/proof", headers=W)
+    assert g.status_code == 200 and g.headers["content-type"] == "image/jpeg"
+    assert g.content == _JPEG
+    assert client.get(f"/v1/airlocks/{code}/proof", headers=AUTH).status_code == 200
+    assert client.get(f"/v1/airlocks/{code}/proof").status_code == 401
+
+
+def test_mark_printed_idempotent_replaces_proof():
+    W = _writer_headers()
+    code = _generated_code()
+    client.post(f"/v1/airlocks/{code}/mark-printed",
+                files={"photo": (f"{code}.jpg", _JPEG, "image/jpeg")}, headers=W)
+    neu = b"\xff\xd8\xff\xe0NEU-BELEG"
+    r = client.post(f"/v1/airlocks/{code}/mark-printed",
+                    files={"photo": (f"{code}.jpg", neu, "image/jpeg")}, headers=W)
+    assert r.status_code == 200
+    assert r.json()["status"] == "printed"
+    assert client.get(f"/v1/airlocks/{code}/proof", headers=W).content == neu
+
+
+def test_mark_printed_from_reserved_409_no_proof():
+    W = _writer_headers()
+    code = "90001"
+    _get_service().registry.add_airlock(code, None, "test", None)  # reserved, kein Render
+    r = client.post(f"/v1/airlocks/{code}/mark-printed",
+                    files={"photo": (f"{code}.jpg", _JPEG, "image/jpeg")}, headers=W)
+    assert r.status_code == 409, r.text
+    # Kein Beleg abgelegt, weil der Uebergang abgelehnt wurde
+    assert client.get(f"/v1/airlocks/{code}/proof", headers=W).status_code == 404
+
+
+def test_mark_printed_validation_and_auth():
+    W = _writer_headers()
+    code = _generated_code()
+    # Pflicht-Foto fehlt -> 422
+    assert client.post(f"/v1/airlocks/{code}/mark-printed", headers=W).status_code == 422
+    # falscher Typ -> 415
+    assert client.post(f"/v1/airlocks/{code}/mark-printed",
+                       files={"photo": ("x.txt", b"hallo", "text/plain")},
+                       headers=W).status_code == 415
+    # zu gross -> 413
+    assert client.post(f"/v1/airlocks/{code}/mark-printed",
+                       files={"photo": ("x.jpg", b"x" * 2_000_001, "image/jpeg")},
+                       headers=W).status_code == 413
+    # ohne Key -> 401
+    assert client.post(f"/v1/airlocks/{code}/mark-printed",
+                       files={"photo": ("x.jpg", _JPEG, "image/jpeg")}).status_code == 401
+    # voller Key darf auch
+    assert client.post(f"/v1/airlocks/{code}/mark-printed",
+                       files={"photo": ("x.jpg", _JPEG, "image/jpeg")},
+                       headers=AUTH).status_code == 200
+
+
+def test_proof_missing_404():
+    W = _writer_headers()
+    code = _generated_code()
+    assert client.get(f"/v1/airlocks/{code}/proof", headers=W).status_code == 404

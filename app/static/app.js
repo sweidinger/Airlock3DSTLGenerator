@@ -48,6 +48,17 @@ async function openHistory(code){
         <span class="muted">${e.actor||''}${e.forced?' · <b class="warnc">forciert</b>':''}</span>
       </div>`).join('')+`</div>` : '<span class="muted">kein Verlauf</span>';
   }catch(e){ $('#histBody').innerHTML=`<span class="err">${e.message}</span>`; }
+  // Druck-Beleg (Foto) anhängen, falls vorhanden. Fetch mit Key -> Blob -> objectURL,
+  // weil <img src> den X-API-Key-Header nicht mitschicken kann.
+  try{
+    const r = await fetch(BASE+'/v1/airlocks/'+code+'/proof', {headers:{'X-API-Key':KEY}});
+    if(r.ok){
+      const u = URL.createObjectURL(await r.blob());
+      $('#histBody').insertAdjacentHTML('beforeend',
+        `<div style="margin-top:14px"><div class="muted" style="margin-bottom:6px">📷 Druck-Beleg</div>`+
+        `<img src="${u}" alt="Druck-Beleg ${code}" style="max-width:100%;border-radius:8px;border:1px solid var(--line)"></div>`);
+    }
+  }catch(_){}
 }
 
 const $ = s => document.querySelector(s);

@@ -5,7 +5,8 @@ import json
 import secrets
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import (Depends, FastAPI, File, Header, HTTPException, Query,
+                     Request, UploadFile)
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -327,6 +328,73 @@ def airlock_history(code: str, svc: AirlockService = Depends(get_service)):
          "source": r["source"], "actor": r["actor"], "forced": bool(r["forced"])}
         for r in svc.registry.get_history(code)
     ]
+
+
+# ---- Druck-Beleg: Kamera-Verifikation generated -> printed -----------
+_PROOF_MAX_BYTES = 2_000_000
+_PROOF_MIMES = ("image/jpeg", "image/png")
+
+
+@app.post("/v1/airlocks/{code}/mark-printed", response_model=AirlockOut,
+          dependencies=[Depends(require_writer_access)], tags=["airlocks"])
+async def mark_printed(code: str, response: Response,
+                       photo: UploadFile = File(...),
+                       x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+                       authorization: str | None = Header(default=None),
+                       svc: AirlockService = Depends(get_service)):
+    """Markiert ein Lock als gedruckt (generated -> printed) und legt das per
+    Live-Kamera aufgenommene Foto als Audit-Beleg ab. Writer-Key genuegt.
+
+    - Foto muss JPEG/PNG und <= 2 MB sein (in der App bereits verkleinert).
+    - Idempotent: ist der Lock schon printed/registered/active, bleibt der Status
+      unangetastet, der Beleg wird aber (er)neu gespeichert.
+    - reserved (noch nicht gerendert) -> 409 (Einzelschritt-Guard).
+    """
+    code = _norm(code)
+    r = svc.registry.get_airlock(code)
+    if r is None:
+        raise HTTPException(404, f"Airlock {code} nicht gefunden.")
+    if photo.content_type not in _PROOF_MIMES:
+        raise HTTPException(415, "Beleg muss JPEG oder PNG sein.")
+    data = await photo.read()
+    if not data:
+        raise HTTPException(422, "Leerer Beleg.")
+    if len(data) > _PROOF_MAX_BYTES:
+        raise HTTPException(413, "Beleg zu gross (max 2 MB).")
+    presented = _presented_key(x_api_key, authorization)
+    if presented and secrets.compare_digest(presented, settings.api_key):
+        actor = "voll"
+    else:
+        info = _identify_writer(presented, svc) if presented else None
+        actor = (info or {}).get("name") or "writer"
+    already = r["status"] in ("printed", "registered", "active")
+    if already:
+        row = r
+    else:
+        # Erst den Uebergang versuchen: bei reserved (nicht gerendert) -> 409,
+        # OHNE einen Beleg abzulegen.
+        try:
+            row = svc.registry.update_status(code, "printed", source="app",
+                                             actor=actor, force=False)
+        except TransitionError as e:
+            raise HTTPException(409, str(e))
+    svc.registry.save_print_proof(code, data, photo.content_type, actor)
+    # Notiz landet bei Writer-/KG-Keys per Middleware im kglog (Header wird dort
+    # entfernt); beim vollen Key bleibt sie als Response-Header sichtbar.
+    response.headers["X-Airlock-Note"] = (
+        f"already={r['status']}+proof" if already else "status=printed+proof")
+    return _airlock_row_to_out(row)
+
+
+@app.get("/v1/airlocks/{code}/proof",
+         dependencies=[Depends(require_read_access)], tags=["airlocks"])
+def get_print_proof(code: str, svc: AirlockService = Depends(get_service)):
+    """Liefert das Druck-Beleg-Foto (fuers Dashboard). Read-Scope."""
+    p = svc.registry.load_print_proof(_norm(code))
+    if p is None:
+        raise HTTPException(404, "Kein Druck-Beleg vorhanden.")
+    return Response(content=p["bytes"], media_type=p["mime"],
+                    headers={"Cache-Control": "private, max-age=60"})
 
 
 # ---- NFC-Tag (signierter Token gebunden an Tag-UID) ------------------

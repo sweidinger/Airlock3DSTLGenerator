@@ -5,7 +5,9 @@ Die finale Hoheit ueber Eindeutigkeit liegt bei KG-Tracker (Source-of-Truth).
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import secrets
 import sqlite3
 import threading
@@ -72,6 +74,9 @@ class Registry:
         self.code_space = 10 ** code_length
         self._lock = threading.Lock()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        # Ablage der Druck-Belege (Fotos) neben der DB (liegt auf demselben Volume).
+        self._proofs_dir = self.db_path.parent / "proofs"
+        self._proofs_dir.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
@@ -154,6 +159,14 @@ class Registry:
                     forced      INTEGER NOT NULL DEFAULT 0
                 );
                 CREATE INDEX IF NOT EXISTS idx_history_code ON status_history(code);
+                CREATE TABLE IF NOT EXISTS print_proofs (
+                    code        TEXT PRIMARY KEY,
+                    captured_at TEXT NOT NULL,
+                    sha256      TEXT NOT NULL,
+                    mime        TEXT NOT NULL,
+                    bytes       INTEGER NOT NULL,
+                    actor       TEXT
+                );
                 """
             )
             self._backfill_history()
@@ -484,6 +497,55 @@ class Registry:
                 "UPDATE writer_api_keys SET last_used_at = ? WHERE id = ?",
                 (_now(), key_id),
             )
+
+    # ---- Druck-Belege (Foto-Nachweis fuer generated -> printed) --------
+    @staticmethod
+    def _proof_ext(mime: str) -> str:
+        return ".png" if mime == "image/png" else ".jpg"
+
+    def save_print_proof(self, code: str, data: bytes, mime: str,
+                         actor: str | None = None) -> dict:
+        """Legt das Beleg-Foto als Datei (neben der DB) ab und upsertet die
+        Metadaten. Ein Beleg pro Lock (Re-Scan ersetzt). Schreiben ist atomar
+        (tmp + os.replace); alte Belege mit anderer Endung werden entfernt."""
+        sha = hashlib.sha256(data).hexdigest()
+        # Vorhandene Belege dieses Codes (egal welche Endung) entfernen.
+        for ext in (".jpg", ".png"):
+            old = self._proofs_dir / f"{code}{ext}"
+            if old.exists():
+                try:
+                    old.unlink()
+                except OSError:
+                    pass
+        path = self._proofs_dir / f"{code}{self._proof_ext(mime)}"
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_bytes(data)
+        os.replace(tmp, path)
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO print_proofs(code,captured_at,sha256,mime,bytes,actor)"
+                " VALUES(?,?,?,?,?,?)"
+                " ON CONFLICT(code) DO UPDATE SET"
+                "  captured_at=excluded.captured_at, sha256=excluded.sha256,"
+                "  mime=excluded.mime, bytes=excluded.bytes, actor=excluded.actor",
+                (code, _now(), sha, mime, len(data), actor),
+            )
+        return {"code": code, "sha256": sha, "mime": mime, "bytes": len(data)}
+
+    def load_print_proof(self, code: str) -> dict | None:
+        """Liest Metadaten + Datei-Bytes des Belegs; None wenn keiner da."""
+        row = self._conn.execute(
+            "SELECT * FROM print_proofs WHERE code = ?", (code,)
+        ).fetchone()
+        if row is None:
+            return None
+        path = self._proofs_dir / f"{code}{self._proof_ext(row['mime'])}"
+        try:
+            data = path.read_bytes()
+        except OSError:
+            return None
+        return {"bytes": data, "mime": row["mime"], "sha256": row["sha256"],
+                "captured_at": row["captured_at"], "actor": row["actor"]}
 
     # ---- App-Key-Value (z. B. NFC-Secret) -----------------------------
     def get_kv(self, key: str) -> str | None:
