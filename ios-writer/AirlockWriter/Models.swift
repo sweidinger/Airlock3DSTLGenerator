@@ -40,8 +40,13 @@ struct Connection {
     var baseURL: String      // z. B. https://10.0.1.9:8453
     var writerKey: String    // alw_… (Writer-Key aus dem Airlock-Dashboard)
 
+    /// Eingaben getrimmt (führende/abschließende Leerzeichen aus Copy&Paste raus).
+    var trimmedBaseURL: String { baseURL.trimmingCharacters(in: .whitespacesAndNewlines) }
+    var trimmedWriterKey: String { writerKey.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// Eingerichtet = beide Felder gefüllt. Ob der Key gültig ist, entscheidet der
+    /// Server (siehe „Verbindung testen"), nicht eine starre Präfix-Prüfung.
     var isConfigured: Bool {
-        !baseURL.trimmingCharacters(in: .whitespaces).isEmpty &&
-        writerKey.hasPrefix("alw_")
+        !trimmedBaseURL.isEmpty && !trimmedWriterKey.isEmpty
     }
 }

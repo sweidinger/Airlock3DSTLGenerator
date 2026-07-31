@@ -111,29 +111,102 @@ struct SettingsView: View {
     @EnvironmentObject var settings: SettingsStore
     @Environment(\.dismiss) private var dismiss
 
+    // Entwurf: erst „Speichern" schreibt in den Store (Abbrechen verwirft).
+    @State private var baseURL = ""
+    @State private var writerKey = ""
+    @State private var testing = false
+    @State private var testMessage: String?
+    @State private var testOK = false
+
+    private var draft: Connection { Connection(baseURL: baseURL, writerKey: writerKey) }
+
     var body: some View {
         NavigationStack {
             Form {
-                Section("Airlock-Server") {
-                    TextField("https://10.0.1.9:8453", text: $settings.baseURL)
+                Section {
+                    TextField("https://10.0.1.9:8453", text: $baseURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
+                } header: {
+                    Text("Airlock-Server")
+                } footer: {
+                    Text("Die eigene Server-Adresse eintragen (z. B. https://10.0.1.9:8453). Der graue Text im Feld ist nur ein Beispiel-Platzhalter, kein Wert.")
                 }
-                Section("Writer-Key") {
-                    SecureField("alw_…", text: $settings.writerKey)
+
+                Section {
+                    SecureField("alw_…", text: $writerKey)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                } header: {
+                    Text("Writer-Key")
+                } footer: {
                     Text("Im Airlock-Dashboard unter \"KG-Tracker\" \u{2192} \"Writer-Keys\" erzeugen. Der Key wird nur im iOS-Keychain gespeichert.")
-                        .font(.footnote).foregroundStyle(.secondary)
+                }
+
+                Section {
+                    Button {
+                        Task { await testConnection() }
+                    } label: {
+                        HStack {
+                            Label("Verbindung testen", systemImage: "antenna.radiowaves.left.and.right")
+                            Spacer()
+                            if testing { ProgressView() }
+                        }
+                    }
+                    .disabled(testing || !draft.isConfigured)
+
+                    if let testMessage {
+                        Label(testMessage, systemImage: testOK ? "checkmark.circle.fill" : "xmark.octagon.fill")
+                            .foregroundStyle(testOK ? .green : .red)
+                            .font(.callout)
+                    }
                 }
             }
             .navigationTitle("Einstellungen")
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Abbrechen") { dismiss() }
+                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Fertig") { dismiss() }
+                    Button("Speichern") { save(); dismiss() }
+                        .disabled(!draft.isConfigured)
                 }
             }
+            .onAppear {
+                baseURL = settings.baseURL
+                writerKey = settings.writerKey
+            }
         }
+    }
+
+    private func save() {
+        settings.baseURL = draft.trimmedBaseURL
+        settings.writerKey = draft.trimmedWriterKey
+    }
+
+    private func testConnection() async {
+        testing = true
+        testMessage = nil
+        defer { testing = false }
+        do {
+            let locks = try await AirlockAPI(connection: draft).listAirlocks()
+            testOK = true
+            testMessage = "Verbindung OK – \(locks.count) Airlock(s) gefunden."
+        } catch {
+            testOK = false
+            testMessage = friendlyMessage(for: error)
+        }
+    }
+
+    private func friendlyMessage(for error: Error) -> String {
+        if case let APIError.http(code, _) = error {
+            if code == 401 { return "Writer-Key abgelehnt (401). Stimmt der Key?" }
+            return "Server antwortete mit HTTP \(code)."
+        }
+        if let urlError = error as? URLError {
+            return "Keine Verbindung: \(urlError.localizedDescription)"
+        }
+        return error.localizedDescription
     }
 }

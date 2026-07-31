@@ -42,12 +42,12 @@ struct AirlockAPI {
 
     private func makeRequest(_ path: String, method: String, body: [String: Any]? = nil) throws -> URLRequest {
         guard connection.isConfigured else { throw APIError.notConfigured }
-        let base = connection.baseURL.trimmingCharacters(in: .whitespaces)
+        let base = connection.trimmedBaseURL
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: base + path) else { throw APIError.badURL }
         var req = URLRequest(url: url)
         req.httpMethod = method
-        req.setValue(connection.writerKey, forHTTPHeaderField: "X-API-Key")
+        req.setValue(connection.trimmedWriterKey, forHTTPHeaderField: "X-API-Key")
         if let body {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = try JSONSerialization.data(withJSONObject: body)
