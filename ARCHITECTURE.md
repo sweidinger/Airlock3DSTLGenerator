@@ -9,7 +9,7 @@
 
 ## 1. Ziel & Kurzbeschreibung
 
-Der Airlock-Generator ist ein **eigenständiger Docker-Container**, der aus einer leeren STL-Vorlage (`DisposableLock_v2.stl`) einzelne, eindeutig nummerierte Airlock-STLs erzeugt. Jede erzeugte Datei enthält eine **erhabene, 5-stellige Nummer** (wie im Sample `DisposableLock_v2_withCode_sample.stl` → „73412"). Diese Nummer dient der **Verifikation eines Chastity-Devices** in der KG-Tracker App.
+Der Airlock-Generator ist ein **eigenständiger Docker-Container**, der aus einer leeren STL-Vorlage (`DisposableLock_NTAG213.stl`) einzelne, eindeutig nummerierte Airlock-STLs erzeugt. Jede erzeugte Datei enthält eine **5-stellige Nummer**, zentriert und bündig ins abgesenkte Zahlenfeld der Oberseite generiert (z. B. „73412"). Diese Nummer dient der **Verifikation eines Chastity-Devices** in der KG-Tracker App. Das Schloss trägt zusätzlich eine Print-Pause-Tasche für einen NTAG213-Tag (Einlegen bei 3 mm Druckhöhe).
 
 Der Generator läuft als reiner Backend-Service. Die **AI-Keyholderin** der KG-Tracker App steuert ihn über eine **REST-API** — z. B. „generiere 10 Airlocks mit je eindeutiger Nummer". Die fertigen STLs werden anschließend gedruckt und die Nummern in KG-Tracker hinterlegt, sodass die AI-Keyholderin bei einer Verschluss-Anforderung ein konkretes, existierendes Lock auswählen kann.
 
@@ -19,73 +19,63 @@ Der Generator läuft als reiner Backend-Service. Die **AI-Keyholderin** der KG-T
 
 ## 2. Technische Machbarkeit — validiert
 
-Der Präge-Ansatz wurde bereits gegen dein Sample geprüft und reproduziert es praktisch deckungsgleich.
+Der Präge-Ansatz erzeugt die Nummer zentriert und bündig im abgesenkten Zahlenfeld der NTAG213-Vorlage.
 
-**Vorlage `DisposableLock_v2.stl`**
+**Vorlage `DisposableLock_NTAG213.stl`** (NTAG213-Schloss, Vorhänge-/Siegel-Form)
 
 | Eigenschaft | Wert |
 |---|---|
-| Abmessungen (X × Y × Z) | 34,90 × 55,86 × 4,00 mm |
-| Dreiecke | 954 |
+| Abmessungen (X × Y × Z) | 39,90 × 55,85 × 4,00 mm |
 | Wasserdicht (manifold) | ja |
-| Volumen | 1859,98 mm³ |
-| Bounding-Box min | (15,225 / 20,014 / −3,000) |
+| Bounding-Box min (native) | (45,125 / 20,014 / 1,000) → per `translate` in den Ursprung normalisiert |
 
-**Sample `DisposableLock_v2_withCode_sample.stl`**
+**Zwei integrierte Features:**
 
-| Eigenschaft | Wert |
-|---|---|
-| Abmessungen | 34,90 × 55,86 × 4,585 mm |
-| Dreiecke | 1834 |
-| Volumen | 1919,40 mm³ (= +59,4 mm³ Schrift) |
-| Nummer | „73412", erhaben auf der flachen Paddle-Fläche |
+- **Tag-Tasche** (innen, für den NTAG213-Inlay 12 × 19 × 0,19 mm): Grundfläche **19,40 × 12,40 mm** (auf 0,20 mm/Seite Spiel aufgeweitet), geschlossener Schlitz zwischen Feldboden und Deckel (~0,2 mm). Der Deckel bridged genau auf **3,00 mm Druckhöhe** zu → dort wird der Druck pausiert, der Tag eingelegt und weitergedruckt.
+- **Zahlenfeld** (oben, abgesenkt): Grundfläche **19,00 × 12,00 mm**, Boden 0,50 mm unter der Oberfläche, exakt mittig über der Tag-Tasche. Hier wird die Nummer generiert.
 
-**Wichtiger Ausrichtungs-Fund (per ICP verifiziert):** Das Sample ist **nicht** einfach eine verschobene Vorlage, sondern die Vorlage **um 180° um die Y-Achse gedreht** und anschließend in den Ursprung normalisiert (ICP-Kosten 0,0; Restabstand mean 0,14 mm — das ist reine Mesh-Diskretisierung, physisch exakt). Es handelt sich also um dasselbe physische Bauteil, nur „umgedreht": In der Vorlage sitzt der Verriegelungs-Dorn unten links und die Paddle-Fläche rechts; nach der Drehung (= Sample-Konvention) liegt der Dorn rechts und die **Paddle-Fläche links**, und genau darauf gehört der Code. Ohne diese Drehung landet der Text neben der Fläche — das war der Positionsfehler in der ersten Fassung. **Der Generator muss die Vorlage vor dem Prägen in die Sample-Ausrichtung bringen.**
+**Ausrichtung:** Das Zahlenfeld liegt bereits oben (+Z), daher **keine Drehung** — die Vorlage wird nur per `translate([−45,1246, −20,0138, −1])` in den Ursprung normalisiert (min-Ecke auf 0/0/0). Danach: Feldboden bei z = 3,5 mm, umgebende Oberfläche bei z = 4,0 mm, Bogen zeigt in +Y. Die Nummer liest sich links→rechts (+X), Bogen oben.
 
-Transformation: `rotate([0,180,0])` um die Y-Achse, danach `translate([50.1246, −20.0138, 1])`, um die Bounding-Box wieder auf min = 0/0/0 zu legen. Die Code-Fläche liegt anschließend oben bei z = 4,0 mm.
+**Präge-Parameter (normalisierte Ausrichtung, Ursprung 0/0/0):**
 
-**Gemessene & finabgestimmte Präge-Parameter (in Sample-Ausrichtung, Ursprung 0/0/0):**
-
-| Parameter | Sample (gemessen) | Finaler Default |
+| Parameter | Default | Bedeutung |
 |---|---|---|
-| Schrift | schmaler Bold-Sans | `Liberation Sans:style=Bold` |
-| Schriftgröße (`size`) | — | 4,31 |
-| Horizontale Skalierung (`xscale`) | — | 0,9573 (Breite an Sample angepasst) |
-| Zeichenhöhe (Cap-Height) | 4,26 mm | 4,25 mm (Treffer) |
-| Textbreite (5 Ziffern) | 15,16 mm | 15,16 mm (Treffer) |
-| Prägehöhe (Z, erhaben) | 0,585 mm | 0,585 mm |
-| Startpunkt links (X) | Tinte ab 2,46 mm | tx = 2,214 (Tinte ab 2,46) |
-| Grundlinie (Y) | 11,69 mm | ty = 11,76 |
-| Oberkante Text (Z) | 4,585 mm | = Deckfläche 4,0 + 0,585 |
+| Schrift | `Liberation Sans:style=Bold` | tabellarische Ziffern |
+| Schriftgröße (`size`) | 4,8 | Textbreite ~16,9 mm (im 19-mm-Feld, ~1 mm Rand/Seite) |
+| Horizontale Skalierung (`xscale`) | 0,9573 | Breite/Glyph-Positionen |
+| Ausrichtung (`halign`/`valign`) | center / center | `tx`/`ty` = Feldzentrum |
+| Feldzentrum (`tx`/`ty`) | 11,2954 / 14,1662 | mittig im Zahlenfeld |
+| Feldboden (`topz`) | 3,5 | Oberfläche = 4,0 |
+| Recess-Tiefe (`depth`) | 0,5 | Oberkante Text bündig bei z = 4,0 |
+| Einsinktiefe (`sink`) | 0,2 | reicht unter den Feldboden → sauberes Manifold |
 
-`Liberation Sans:style=Bold` trifft die schmale Sample-Schrift deutlich besser als DejaVu (das rund 20 % zu breit läuft). Eine leichte horizontale Skalierung (0,9573) bringt Breite und Glyph-Positionen aller fünf Ziffern zur Deckung. Ergebnis: X 2,46–17,62 mm (Ziel 2,46–17,61), Höhe 4,25 mm (Ziel 4,26), Zielhöhe Z 4,585 mm exakt. Das erzeugte Modell ist wasserdicht (ein einziges Volumen). Der Overlay-Vergleich (Anhang A) zeigt generierte und Sample-Ziffern nahezu deckungsgleich; verbleibende haardünne Ränder resultieren aus minimalen Glyph-Unterschieden des exakten Original-Fonts.
+Die Ziffern steigen vom Feldboden (z = 3,5) bis exakt zur umgebenden Oberfläche (z = 4,0) und stehen damit **bündig** in der 0,5-mm-Absenkung — abriebgeschützt und ideal für den Mehrfarbdruck (`body`/`code`-Split füllt das Feld mit einer Kontrastfarbe). Das erzeugte Modell ist wasserdicht.
 
-**Validierter OpenSCAD-Kern (finale Referenz):**
+**OpenSCAD-Kern (Referenz):**
 
 ```scad
 code   = "73412";
-size   = 4.31;
-xscale = 0.9573;                      // Breite an Sample angeglichen
-depth  = 0.585;                       // erhabene Höhe
-tx     = 2.214;                       // Tinte startet dann bei X=2.46
-ty     = 11.76;                       // Grundlinie
+size   = 4.8;
+xscale = 0.9573;
+depth  = 0.5;                         // Recess-Füllhöhe → Oberkante bündig bei z=4.0
+tx     = 11.2954;                     // Feldzentrum X
+ty     = 14.1662;                     // Feldzentrum Y
 font   = "Liberation Sans:style=Bold";
-topz   = 4.0;                         // Deckfläche
+topz   = 3.5;                         // Zahlenfeld-Boden (Oberfläche 4.0)
 
 union() {
-  // Vorlage in Sample-Ausrichtung: 180° um Y, dann in Ursprung normalisieren
-  translate([50.12457, -20.01378, 1])
-    rotate([0,180,0])
-      import("DisposableLock_v2.stl");
-  // Code erhaben auf der (jetzt oben liegenden) Paddle-Fläche
-  translate([tx, ty, topz - 0.2])     // 0.2 mm einsinken → sauberes Manifold
+  // Zahlenfeld liegt bereits oben → keine Drehung, nur normalisieren
+  translate([-45.12457, -20.01378, -1.0])
+    import("DisposableLock_NTAG213.stl");
+  // Code zentriert & bündig ins abgesenkte Zahlenfeld
+  translate([tx, ty, topz - 0.2])     // 0.2 mm in den Feldboden einsinken → Manifold
     scale([xscale, 1, 1])
       linear_extrude(height = depth + 0.2)
-        text(code, size = size, font = font, halign = "left", valign = "baseline");
+        text(code, size = size, font = font, halign = "center", valign = "center");
 }
 ```
 
-> **Design-Hinweis Manifold:** Text 0,2 mm in die Deckfläche einsinken lassen, damit die Boolesche Vereinigung ein einziges wasserdichtes Volumen ergibt (statt zweier sich berührender Körper). Bestätigt: Ergebnis ist watertight. Wichtig für saubere Slicer-Ergebnisse.
+> **Design-Hinweis Manifold:** Text 0,2 mm in den Feldboden einsinken lassen, damit die Boolesche Vereinigung ein einziges wasserdichtes Volumen ergibt. Bestätigt: Ergebnis ist watertight.
 
 ---
 
@@ -218,7 +208,7 @@ Kein öffentliches Port-Mapping — Erreichbarkeit ausschließlich über das int
 1. **Ausrichtung:** *Geklärt* — Vorlage per 180°-Y-Drehung in Sample-Ausrichtung + Normalisierung in den Ursprung (§2).
 2. **Font:** *Weitgehend geklärt* — `Liberation Sans:style=Bold` mit `xscale = 0,9573`. Ein exakteres Match nur mit dem Original-CAD-Font; Rest-Abweichung sub-0,2 mm.
 3. **Manifold-Merge:** 0,2 mm Einsinktiefe (empfohlen, bestätigt watertight).
-4. **Erhaben vs. graviert:** Sample ist erhaben → übernommen. Gravur wäre abriebrobuster — als Option vormerken.
+4. **Bündig im Zahlenfeld:** Nummer sitzt bündig in der 0,5-mm-Absenkung (abriebgeschützt, ideal für Mehrfarb-Inlay). Erhaben oder graviert wären per Parameter (`depth`/`topz`) möglich — als Option vormerken.
 5. **Prüfziffer / Alphanumerik:** vorerst nein; als Feature-Flag vorsehen.
 6. **Multi-Template:** Architektur erlaubt weitere Lock-Modelle als zusätzliche „Template-Profile" (siehe `app/config.py::TemplateProfile`).
 

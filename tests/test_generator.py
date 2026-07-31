@@ -53,12 +53,23 @@ def test_render_matches_sample(tmp_path):
     assert res.sha256 and res.bytes > 0
 
     glo, ghi, _ = _stl_bounds(out)
-    # Aussenmasse muessen mit dem Sample uebereinstimmen (Ausrichtung korrekt)
+    # Aussenmasse muessen mit der Vorlage uebereinstimmen (Ausrichtung korrekt);
+    # die Nummer ist buendig -> ueberschreitet die Oberflaeche 4.0 nicht.
     for i in range(3):
         assert abs(ghi[i] - SAMPLE_BOUNDS_MAX[i]) < 0.05, f"max[{i}] {ghi[i]}"
         assert abs(glo[i] - SAMPLE_BOUNDS_MIN[i]) < 0.05, f"min[{i}] {glo[i]}"
-    # Erhabene Schrift vorhanden (ueber der Deckflaeche z=4.0)
-    assert ghi[2] > 4.4, "keine erhabene Praegung erkannt"
+
+    # Buendige Praegung im Zahlenfeld: das Code-Volumen allein pruefen.
+    codeout = tmp_path / "code.stl"
+    Generator().render("73412", out_path=codeout, part="code")
+    clo, chi, _ = _stl_bounds(codeout)
+    # Ziffern enden buendig mit der Oberflaeche (z ~ 4.0) und sinken in den Feldboden.
+    assert 3.9 < chi[2] <= 4.02, f"Ziffern nicht buendig (zmax={chi[2]})"
+    assert clo[2] < 3.4, f"Ziffern sinken nicht in den Feldboden (zmin={clo[2]})"
+    # Text sitzt zentriert im Zahlenfeld (Zentrum ~ 11.30 / 14.17), Breite < 19 mm.
+    assert 3.0 < (chi[0] - clo[0]) < 19.0 and 3.0 < (chi[1] - clo[1]) < 12.0
+    assert abs((chi[0] + clo[0]) / 2 - 11.30) < 1.5, "Text nicht in Feldmitte (X)"
+    assert abs((chi[1] + clo[1]) / 2 - 14.17) < 1.5, "Text nicht in Feldmitte (Y)"
 
 
 def test_deterministic(tmp_path):

@@ -277,7 +277,7 @@ def test_config_masks_key():
     assert c.status_code == 200
     body = c.json()
     assert body["api_key_masked"] != "test-key"      # nicht im Klartext
-    assert body["profile"]["name"] == "DisposableLock_v2"
+    assert body["profile"]["name"] == "DisposableLock_NTAG213"
     assert body["max_batch"] == 50
     assert client.get("/v1/config").status_code == 401
 

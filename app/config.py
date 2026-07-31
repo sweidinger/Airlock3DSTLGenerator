@@ -17,32 +17,37 @@ def _env_path(name: str, default: str) -> Path:
 class TemplateProfile:
     """Beschreibt eine Lock-Vorlage samt Praege-Parametern.
 
-    Die Defaults entsprechen den gegen `DisposableLock_v2_withCode_sample.stl`
-    validierten Werten (siehe ARCHITECTURE.md, Abschnitt 2). Weitere Modelle
-    lassen sich spaeter als zusaetzliche Profile ergaenzen.
+    Defaults = NTAG213-Schloss (Vorhaenge-/Siegel-Form mit Print-Pause-Tasche
+    fuer einen 12x19x0,19-mm-Tag und abgesenktem Zahlenfeld auf der Oberseite).
+    Die Nummer wird zentriert und buendig in dieses Feld generiert. Weitere
+    Modelle lassen sich spaeter als zusaetzliche Profile ergaenzen.
     """
 
-    name: str = "DisposableLock_v2"
-    base_stl: Path = BASE_DIR / "templates" / "DisposableLock_v2.stl"
+    name: str = "DisposableLock_NTAG213"
+    base_stl: Path = BASE_DIR / "templates" / "DisposableLock_NTAG213.stl"
 
     # Schrift / Groesse
     font: str = "Liberation Sans:style=Bold"
-    size: float = 4.31
-    xscale: float = 0.9573      # Horizontale Skalierung -> Breite wie Sample
-    depth: float = 0.585        # Praegehoehe (erhaben)
-    sink: float = 0.20          # Einsinktiefe -> sauberes Manifold
+    size: float = 4.8
+    xscale: float = 0.9573      # Horizontale Skalierung (Breite ~16,9 mm im 19-mm-Feld)
+    depth: float = 0.5          # Recess-Fuellhoehe -> Ziffern enden buendig mit der Oberflaeche
+    sink: float = 0.20          # Einsinktiefe in den Feldboden -> sauberes Manifold
 
-    # Textposition (in Sample-Ausrichtung, Ursprung 0/0/0)
-    tx: float = 2.214           # Tinte startet dann bei X = 2.46 mm
-    ty: float = 11.76           # Grundlinie
-    topz: float = 4.0           # Deckflaeche
+    # Textposition: zentriert im abgesenkten Zahlenfeld (normalisierte Koordinaten).
+    # halign/valign = center -> tx/ty ist das Feldzentrum, nicht die Grundlinie.
+    tx: float = 11.2954         # Zahlenfeld-Zentrum X
+    ty: float = 14.1662         # Zahlenfeld-Zentrum Y
+    topz: float = 3.5           # Zahlenfeld-Boden (Oberflaeche liegt bei 4.0)
+    halign: str = "center"
+    valign: str = "center"
 
-    # Vorlagen-Ausrichtung: 180 Grad um Y, danach in den Ursprung schieben.
-    rot: tuple[float, float, float] = (0.0, 180.0, 0.0)
-    translate: tuple[float, float, float] = (50.12456894, -20.01378441, 1.0)
+    # Vorlagen-Ausrichtung: Zahlenfeld liegt bereits oben -> keine Drehung,
+    # nur die min-Ecke der STL in den Ursprung normalisieren.
+    rot: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    translate: tuple[float, float, float] = (-45.12457, -20.01378, -1.0)
 
     # erwartete Ausgabemasse (fuer Plausibilitaetscheck)
-    expected_bounds_max: tuple[float, float, float] = (34.9, 55.859, 4.585)
+    expected_bounds_max: tuple[float, float, float] = (39.9, 55.854, 4.0)
 
 
 @dataclass(frozen=True)

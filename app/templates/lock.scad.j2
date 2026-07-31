@@ -19,20 +19,21 @@ sink    = {{ sink }};
 part    = "{{ part }}";
 
 module lock_base() {
-    // Vorlage in Sample-Ausrichtung bringen: 180 Grad um Y, dann in Ursprung normalisieren.
+    // Vorlage ausrichten: optional drehen, dann min-Ecke in den Ursprung normalisieren.
     translate([{{ tr_x }}, {{ tr_y }}, {{ tr_z }}])
         rotate([{{ rot_x }}, {{ rot_y }}, {{ rot_z }}])
             import("{{ base_stl }}");
 }
 
 module code_solid() {
-    // Code erhaben auf die (nun oben liegende) Paddle-Flaeche praegen.
-    // Reicht um `sink` unter die Deckflaeche -> sauberer Verbund/Aussparung.
+    // Code ins abgesenkte Zahlenfeld praegen: von (topz - sink) bis (topz + depth).
+    // topz = Feldboden, depth = Recess-Tiefe -> Oberkante buendig mit der Oberflaeche.
+    // `sink` reicht unter den Feldboden -> sauberer Verbund/Aussparung.
     translate([tx, ty, topz - sink])
         scale([xscale, 1, 1])
             linear_extrude(height = depth + sink)
                 text(code, size = size, font = font,
-                     halign = "left", valign = "baseline");
+                     halign = "{{ halign }}", valign = "{{ valign }}");
 }
 
 if (part == "code") {

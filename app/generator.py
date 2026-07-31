@@ -70,6 +70,8 @@ class Generator:
             ty=p.ty,
             font=p.font,
             topz=p.topz,
+            halign=p.halign,
+            valign=p.valign,
             base_stl=str(Path(p.base_stl).resolve()),
             rot_x=p.rot[0], rot_y=p.rot[1], rot_z=p.rot[2],
             tr_x=p.translate[0], tr_y=p.translate[1], tr_z=p.translate[2],

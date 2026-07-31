@@ -12,8 +12,8 @@ os.environ["AIRLOCK_MAX_BATCH"] = "50"
 
 TESTS_DIR = pathlib.Path(__file__).resolve().parent
 
-# Soll-Aussenmasse aus dem Original-Sample DisposableLock_v2_withCode_sample.stl
-# (siehe ARCHITECTURE.md §2). Dienen als Referenz, ohne die grosse Binaerdatei
-# im Repo vorhalten zu muessen.
+# Soll-Aussenmasse der NTAG213-Vorlage (normalisiert, min-Ecke im Ursprung).
+# Die Nummer wird buendig ins Zahlenfeld generiert -> zmax bleibt bei der
+# Oberflaeche 4.0 (keine erhabene Praegung mehr).
 SAMPLE_BOUNDS_MIN = (0.0, 0.0, 0.0)
-SAMPLE_BOUNDS_MAX = (34.9, 55.859, 4.585)
+SAMPLE_BOUNDS_MAX = (39.9, 55.854, 4.0)

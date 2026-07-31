@@ -3,6 +3,22 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.12.0] - 2026-07-31
+### Geändert
+- **Neue Standard-Vorlage `DisposableLock_NTAG213.stl`** ersetzt `DisposableLock_v2`
+  vollständig. Das NTAG213-Schloss hat eine Print-Pause-Tasche für einen
+  12 × 19 × 0,19-mm-Tag (Einlegen bei 3 mm Druckhöhe) und ein abgesenktes
+  Zahlenfeld (19 × 12 mm, 0,5 mm tief) auf der Oberseite.
+- **Nummer-Platzierung**: Die 5-stellige Nummer wird jetzt **zentriert und bündig**
+  ins Zahlenfeld generiert (statt erhaben auf die Paddle-Fläche), lesbar
+  links→rechts mit dem Bügel oben. Abriebgeschützt und ideal für den
+  Mehrfarb-3MF-Export (`body`/`code`-Split unverändert nutzbar).
+- **Toleranz**: Tag-Tasche auf 19,40 × 12,40 mm aufgeweitet (0,20 mm/Seite) für
+  leichteres Einlegen während der Druckpause.
+- `TemplateProfile` um `halign`/`valign` erweitert (Default `center`); das
+  SCAD-Template platziert den Text darüber. Profil-Default-Name jetzt
+  `DisposableLock_NTAG213`. Tests/ARCHITECTURE.md entsprechend aktualisiert.
+
 ## [1.11.0] - 2026-07-31
 ### Hinzugefügt
 - **Universal-Link-Record auf dem Tag**: `nfc/prepare` liefert zusätzlich ein
