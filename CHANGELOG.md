@@ -3,6 +3,15 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.8.1] - 2026-07-31
+### Geändert
+- `nfc/commit` (Tag beschreiben – auch aus der nativen iOS-Writer-App) hebt den
+  Status eines Airlocks jetzt automatisch von `reserved`/`generated`/`printed`
+  auf **`registered`**: sobald ein physischer Tag gebunden wird, gilt der Lock als
+  registriert (kein manuelles Umstellen im Dashboard mehr nötig). Bereits
+  `registered`/`active` bleibt unverändert; terminale Status (`retired`/`voided`)
+  werden nicht angetastet.
+
 ## [1.8.0] - 2026-07-30
 ### Hinzugefügt
 - **Writer-Keys** für eine native NFC-Writer-App: eigener Dashboard-Bereich

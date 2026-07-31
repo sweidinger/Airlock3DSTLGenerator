@@ -233,9 +233,10 @@ def test_nfc_tag_binding():
     assert pj["ndef_text"].startswith("AL1|")
     token = pj["token"]
 
-    # binden
+    # binden -> Status wird automatisch von 'generated' auf 'registered' gehoben
     cm = client.post(f"/v1/airlocks/{code}/nfc/commit", json={"uid": uid}, headers=AUTH)
     assert cm.status_code == 200 and cm.json()["nfc_uid"] == "04112233445580"
+    assert cm.json()["status"] == "registered"
 
     # gültige Verifikation
     v = client.post(f"/v1/airlocks/{code}/nfc/verify",
@@ -333,10 +334,10 @@ def test_kg_verify_require_status():
 
     v = client.post(f"/v1/airlocks/{code}/nfc/verify", json={"uid": uid, "token": tok}, headers=KG).json()
     assert v["valid"] is True
-    # require_status=active, Status ist 'generated' -> mismatch
+    # require_status=active, Status ist nach commit 'registered' -> mismatch
     m = client.post(f"/v1/airlocks/{code}/nfc/verify",
                     json={"uid": uid, "token": tok, "require_status": "active"}, headers=KG).json()
-    assert m["valid"] is False and m["reason"] == "status_mismatch" and m["status"] == "generated"
+    assert m["valid"] is False and m["reason"] == "status_mismatch" and m["status"] == "registered"
     # auf active setzen -> jetzt gueltig
     client.patch(f"/v1/airlocks/{code}", json={"status": "active"}, headers=KG)
     ok = client.post(f"/v1/airlocks/{code}/nfc/verify",

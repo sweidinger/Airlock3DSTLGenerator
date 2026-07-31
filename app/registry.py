@@ -18,6 +18,9 @@ STATUSES = (
     "reserved", "generated", "printed", "registered", "active", "retired", "voided",
 )
 _TERMINAL = {"retired", "voided"}
+# Beim Beschreiben eines Tags (nfc/commit) wird der Status automatisch auf
+# 'registered' gehoben, sofern der Code noch auf einer dieser Vorstufen steht.
+_NFC_PROMOTE_FROM = ("reserved", "generated", "printed")
 
 
 def _now() -> str:
@@ -208,10 +211,14 @@ class Registry:
         ).fetchone()
 
     def set_nfc(self, code: str, uid: str) -> sqlite3.Row:
-        """Bindet eine Tag-UID an einen Code. Fehler bei Konflikt/Unbekannt."""
+        """Bindet eine Tag-UID an einen Code und hebt den Status auf 'registered'
+        an, sofern der Code noch auf einer Vorstufe steht (reserved/generated/
+        printed). Bereits 'registered'/'active' bleibt unveraendert; terminale
+        Status (retired/voided) werden nicht angetastet. Fehler bei Konflikt/
+        Unbekannt."""
         with self._lock, self._conn:
             row = self._conn.execute(
-                "SELECT code FROM airlocks WHERE code=?", (code,)
+                "SELECT code, status FROM airlocks WHERE code=?", (code,)
             ).fetchone()
             if row is None:
                 raise KeyError(code)
@@ -220,10 +227,17 @@ class Registry:
             ).fetchone()
             if other is not None:
                 raise ValueError(f"Tag-UID bereits an Code {other['code']} gebunden.")
-            self._conn.execute(
-                "UPDATE airlocks SET nfc_uid=?, nfc_written_at=? WHERE code=?",
-                (uid, _now(), code),
-            )
+            if row["status"] in _NFC_PROMOTE_FROM:
+                self._conn.execute(
+                    "UPDATE airlocks SET nfc_uid=?, nfc_written_at=?, status='registered'"
+                    " WHERE code=?",
+                    (uid, _now(), code),
+                )
+            else:
+                self._conn.execute(
+                    "UPDATE airlocks SET nfc_uid=?, nfc_written_at=? WHERE code=?",
+                    (uid, _now(), code),
+                )
         return self.get_airlock(code)
 
     # ---- KG-Tracker-API-Keys -----------------------------------------
