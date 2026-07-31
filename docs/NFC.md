@@ -48,6 +48,9 @@ API (voller Key): `GET /v1/nfc/secret/status`, `POST /v1/nfc/secret/generate`
   → `{"code","uid","token","ndef_text","secret_configured"}`.
   Liefert den zu schreibenden Payload (UID muss vorher bekannt sein, z. B. vom
   Reader gelesen).
+- `POST /v1/airlocks/{code}/nfc/prepare` / `…/nfc/commit` sind **erst ab Status
+  `printed`** erlaubt (Ausnahme: der Lock ist bereits gebunden → Neu-/Rückschreiben).
+  Sonst **409** („erst als gedruckt markieren"). `commit` hebt `printed → registered`.
 - `POST /v1/airlocks/{code}/nfc/commit`  Body `{"uid": "...", "rebind": false}`
   → speichert die UID am Code (`nfc_uid`). Eine Bindung ist **endgültig**:
   - Ist der Code bereits mit einem **anderen** Tag verheiratet → **409**.
@@ -58,7 +61,11 @@ API (voller Key): `GET /v1/nfc/secret/status`, `POST /v1/nfc/secret/generate`
     `rebind: true` **und** gesetztem `AIRLOCK_BETA_TAG_MOVE=1` (Beta) möglich
     (der Tag wird dort gelöst; `warning` weist darauf hin). Sonst → **409**.
 - `POST /v1/airlocks/{code}/nfc/verify`  Body `{"uid","token"}`
-  → `{"valid": bool, "reason": "...", ...}`. Für den KG-Tracker.
+  → `{"valid": bool, "reason": "...", ...}`. Für den KG-Tracker — **und** die
+  Writer-App (Selbstkontrolle nach dem Schreiben). Zugriff: voller Key, KG-Key
+  ODER Writer-Key.
+- `GET /v1/airlocks/{code}/history` → Status-Verlauf (Zeit, Quelle
+  `system`/`app`/`api`, Akteur, `forced`). Zugriff wie Lesen.
 
 ## Verifikation im KG-Tracker (später)
 

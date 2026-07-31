@@ -78,7 +78,8 @@
         </select>
         <button class="secondary" id="tmfSelBtn" title="Mehrfarb-Export (Bambu) aus den markierten Airlocks erstellen" disabled>Mehrfarbe erstellen</button>
         <small class="hint" id="tmfSelCount"></small>
-        <small class="hint" id="airlockCount" style="margin-left:auto"></small>
+        <label class="hint" id="forceWrap" title="Nur mit vollem Key: erzwingt sonst unerlaubte Statuswechsel (wird protokolliert)" style="display:flex;align-items:center;gap:5px;margin-left:auto;cursor:pointer"><input type="checkbox" id="forceToggle" style="width:auto"> ⚙ Erzwingen</label>
+        <small class="hint" id="airlockCount"></small>
       </div>
       <div class="tablewrap">
         <table><thead><tr>
@@ -239,6 +240,16 @@
     </div>
     <canvas id="viewerCanvas"></canvas>
     <div class="hint">Ziehen = drehen · Scrollen = zoomen · Rechtsklick-Ziehen = verschieben</div>
+  </div>
+</div>
+
+<div class="modal" id="histModal">
+  <div class="box" style="width:min(560px,94vw);height:auto;max-height:92vh">
+    <div class="bar">
+      <h3 id="histTitle">Status-Verlauf</h3>
+      <button class="secondary" style="margin-left:auto" onclick="document.getElementById('histModal').style.display='none'">Schließen</button>
+    </div>
+    <div id="histBody" style="padding:16px"></div>
   </div>
 </div>
 

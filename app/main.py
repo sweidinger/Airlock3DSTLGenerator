@@ -18,7 +18,7 @@ from .models import (AirlockOut, BatchOut, GenerateRequest, KgKeyCreate,
                      NfcCommitRequest, NfcPrepareRequest, NfcSecretBackupRequest,
                      NfcSecretGenerate, NfcSecretRestoreRequest, NfcVerifyRequest,
                      StatusUpdate, ThreeMFRequest, WriterKeyCreate)
-from .registry import STATUSES, CodeExhaustionError
+from .registry import STATUSES, CodeExhaustionError, TransitionError
 from .service import AirlockService
 from .updates import read_status, request_update
 from .version import APP_VERSION, BUILD_DATE, GIT_SHA
@@ -291,24 +291,52 @@ def download_stl(code: str, svc: AirlockService = Depends(get_service)):
 @app.patch("/v1/airlocks/{code}", response_model=AirlockOut,
            dependencies=[Depends(require_kg_access)], tags=["airlocks"])
 def update_status(code: str, upd: StatusUpdate, response: Response,
+                  x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+                  authorization: str | None = Header(default=None),
                   svc: AirlockService = Depends(get_service)):
     code = _norm(code)
+    presented = _presented_key(x_api_key, authorization)
+    is_full = bool(presented and secrets.compare_digest(presented, settings.api_key))
+    force = bool(upd.force and is_full)          # force NUR mit vollem Key
+    if is_full:
+        actor = "voll"
+    else:
+        info = _identify_kg(presented, svc) if presented else None
+        actor = (info or {}).get("name") or "kg"
     try:
-        r = svc.registry.update_status(code, upd.status)
+        r = svc.registry.update_status(code, upd.status, source="api",
+                                       actor=actor, force=force)
     except KeyError:
         raise HTTPException(404, f"Airlock {code} nicht gefunden.")
+    except TransitionError as e:
+        raise HTTPException(409, str(e))
     except ValueError as e:
         raise HTTPException(422, str(e))
-    response.headers["X-Airlock-Note"] = f"status={upd.status}"
+    response.headers["X-Airlock-Note"] = f"status={upd.status}" + ("+force" if force else "")
     return _airlock_row_to_out(r)
+
+
+@app.get("/v1/airlocks/{code}/history",
+         dependencies=[Depends(require_read_access)], tags=["airlocks"])
+def airlock_history(code: str, svc: AirlockService = Depends(get_service)):
+    code = _norm(code)
+    if svc.registry.get_airlock(code) is None:
+        raise HTTPException(404, f"Airlock {code} nicht gefunden.")
+    return [
+        {"from": r["from_status"], "to": r["to_status"], "at": r["at"],
+         "source": r["source"], "actor": r["actor"], "forced": bool(r["forced"])}
+        for r in svc.registry.get_history(code)
+    ]
 
 
 # ---- NFC-Tag (signierter Token gebunden an Tag-UID) ------------------
 @app.post("/v1/airlocks/{code}/nfc/prepare", dependencies=[Depends(require_writer_access)], tags=["nfc"])
 def nfc_prepare(code: str, req: NfcPrepareRequest, svc: AirlockService = Depends(get_service)):
     code = _norm(code)
-    if svc.registry.get_airlock(code) is None:
+    r = svc.registry.get_airlock(code)
+    if r is None:
         raise HTTPException(404, f"Airlock {code} nicht gefunden.")
+    _require_writable_status(r)
     secret = svc.effective_nfc_secret()
     try:
         payload = nfclib.make_payload(code, req.uid, secret)
@@ -320,15 +348,28 @@ def nfc_prepare(code: str, req: NfcPrepareRequest, svc: AirlockService = Depends
 
 @app.post("/v1/airlocks/{code}/nfc/commit", dependencies=[Depends(require_writer_access)], tags=["nfc"])
 def nfc_commit(code: str, req: NfcCommitRequest, response: Response,
+               x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+               authorization: str | None = Header(default=None),
                svc: AirlockService = Depends(get_service)):
     code = _norm(code)
+    r = svc.registry.get_airlock(code)
+    if r is None:
+        raise HTTPException(404, f"Airlock {code} nicht gefunden.")
+    _require_writable_status(r)
     try:
         uid = nfclib.normalize_uid(req.uid)
     except ValueError as e:
         raise HTTPException(422, str(e))
+    presented = _presented_key(x_api_key, authorization)
+    if presented and secrets.compare_digest(presented, settings.api_key):
+        actor = "voll"
+    else:
+        info = _identify_writer(presented, svc) if presented else None
+        actor = (info or {}).get("name") or "writer"
     try:
         res = svc.registry.set_nfc(
             code, uid, rebind=req.rebind, allow_tag_move=settings.beta_tag_move,
+            actor=actor,
         )
     except KeyError:
         raise HTTPException(404, f"Airlock {code} nicht gefunden.")
@@ -350,10 +391,13 @@ def nfc_commit(code: str, req: NfcCommitRequest, response: Response,
     return out
 
 
-@app.post("/v1/airlocks/{code}/nfc/verify", dependencies=[Depends(require_kg_access)], tags=["nfc"])
+@app.post("/v1/airlocks/{code}/nfc/verify", dependencies=[Depends(require_read_access)], tags=["nfc"])
 def nfc_verify(code: str, req: NfcVerifyRequest, response: Response,
                svc: AirlockService = Depends(get_service)):
-    """Für den KG-Tracker: prüft Signatur, UID-Bindung und (optional) Status."""
+    """Prüft Signatur, UID-Bindung und (optional) Status.
+
+    Zugriff: voller Key, KG-Key ODER Writer-Key (die Writer-App liest ihre
+    frisch geschriebenen Tags zur Selbstkontrolle zurück)."""
     code = _norm(code)
     r = svc.registry.get_airlock(code)
     if r is None:
@@ -663,6 +707,19 @@ def nfc_secret_restore(req: NfcSecretRestoreRequest, svc: AirlockService = Depen
 
 
 # ---- Helpers ----------------------------------------------------------
+def _require_writable_status(row) -> None:
+    """Tag-Schreiben (prepare/commit) erst ab Status 'printed'. Ausnahme: der
+    Lock hat bereits einen Tag (Neu-/Rückschreiben, rebind laufen weiter)."""
+    keys = row.keys()
+    bound = ("nfc_uid" in keys and row["nfc_uid"])
+    if not bound and row["status"] != "printed":
+        raise HTTPException(
+            409,
+            f"Tag-Schreiben erst ab Status 'printed' (aktuell '{row['status']}'). "
+            "Lock zuerst als gedruckt markieren.",
+        )
+
+
 def _norm(code: str) -> str:
     try:
         return validate_code(code, settings.code_length)

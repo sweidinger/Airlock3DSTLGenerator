@@ -3,7 +3,52 @@ const STATUS_COLORS = {
   registered:'var(--registered)', active:'var(--active)', retired:'var(--retired)', voided:'var(--voided)'
 };
 const STATUSES = Object.keys(STATUS_COLORS);
+// Erlaubte manuelle Uebergaenge (spiegelt ALLOWED_TRANSITIONS im Backend).
+const NEXT = { reserved:['voided'], generated:['printed','voided'], printed:['voided'],
+  registered:['active','voided'], active:['retired'], retired:[], voided:[] };
+const STEP_ORDER = ['reserved','generated','printed','registered','active','retired'];
 let BASE = '', KEY = '';
+
+function forceOn(){ return !!($('#forceToggle') && $('#forceToggle').checked); }
+function miniStepper(status){
+  const vi = STEP_ORDER.indexOf(status), voided = status==='voided';
+  const dots = STEP_ORDER.map((s,i)=>{
+    const done = !voided && vi>=0 && i<=vi;
+    return `<span class="mdot${done?' done':''}" title="${s}" style="--c:${done?`var(--${status})`:'var(--line)'}"></span>`;
+  }).join('<span class="mline"></span>');
+  return `<div class="ministep${voided?' vd':''}" title="${status}">${dots}${voided?'<span class="vflag">✕ voided</span>':''}</div>`;
+}
+function statusControl(r){
+  const f = forceOn();
+  let opts = f ? STATUSES.filter(s=>s!==r.status) : (NEXT[r.status]||[]).slice();
+  const primary = (!f && r.status==='generated') ? 'printed' : null;
+  const selOpts = opts.filter(s=>s!==primary);
+  const sel = selOpts.length
+    ? `<select class="statusSel" data-code="${r.code}"><option value="" disabled selected>ändern…</option>`+
+      selOpts.map(s=>`<option value="${s}">→ ${s}</option>`).join('')+`</select>` : '';
+  const pbtn = primary ? `<button class="printedBtn" data-code="${r.code}" title="Als gedruckt markieren (generated → printed)">gedruckt</button>` : '';
+  return `${miniStepper(r.status)}
+    <div class="row" style="gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap">
+      <span class="pill" style="background:var(--${r.status})">${r.status}</span>
+      ${pbtn}${sel}
+      <button class="secondary hist" data-code="${r.code}" title="Status-Verlauf mit Zeit + Auslöser">Verlauf</button>
+    </div>`;
+}
+function srcBadge(src){ const m={system:'⚙ System',app:'📱 App',api:'🔌 API'};
+  return `<span class="sbadge s-${src}">${m[src]||src}</span>`; }
+async function openHistory(code){
+  $('#histTitle').textContent='Status-Verlauf · '+code;
+  $('#histBody').innerHTML='…'; $('#histModal').style.display='flex';
+  try{ const h = await api('/v1/airlocks/'+code+'/history');
+    $('#histBody').innerHTML = h.length ? `<div class="timeline">`+h.map(e=>`
+      <div class="tl-row">
+        <span class="pill" style="background:var(--${e.to})">${e.to}</span>
+        <span class="mono muted">${fmtDate(e.at)}</span>
+        ${srcBadge(e.source)}
+        <span class="muted">${e.actor||''}${e.forced?' · <b class="warnc">forciert</b>':''}</span>
+      </div>`).join('')+`</div>` : '<span class="muted">kein Verlauf</span>';
+  }catch(e){ $('#histBody').innerHTML=`<span class="err">${e.message}</span>`; }
+}
 
 const $ = s => document.querySelector(s);
 function toast(msg, kind){ const t=$('#toast'); t.textContent=msg; t.className='toast show '+(kind||'');
@@ -166,12 +211,10 @@ async function refreshAirlocks(){
     const rows = await api('/v1/airlocks?limit=500'+(f?('&status='+f):''));
     $('#airlockCount').textContent = rows.length+' Einträge';
     $('#airlockRows').innerHTML = rows.length ? rows.map(r=>{
-      const sel = `<select data-code="${r.code}" class="statusSel">`+
-        STATUSES.map(s=>`<option ${s===r.status?'selected':''}>${s}</option>`).join('')+`</select>`;
       return `<tr>
         <td><input type="checkbox" class="tmfChk" data-code="${r.code}"></td>
         <td class="mono"><b>${r.code}</b></td>
-        <td>${sel}</td>
+        <td style="min-width:230px">${statusControl(r)}</td>
         <td class="muted">${r.source||''}</td>
         <td class="mono muted">${r.batch_id||''}</td>
         <td class="muted">${fmtDate(r.created_at)}</td>
@@ -208,11 +251,16 @@ function bindRowActions(){
   document.querySelectorAll('.view').forEach(b=>b.onclick=()=>viewSTL(b.dataset.path,b.dataset.title));
   document.querySelectorAll('.tmf').forEach(b=>b.onclick=()=>threemfExport({batch_id:b.dataset.batch}, b));
   document.querySelectorAll('.nfc').forEach(b=>b.onclick=()=>openNfcModal(b.dataset.code, b.dataset.uid));
-  document.querySelectorAll('.statusSel').forEach(sel=>sel.onchange=async()=>{
-    try{ await api('/v1/airlocks/'+sel.dataset.code,{method:'PATCH',body:{status:sel.value}});
-      toast('Status → '+sel.value,'ok'); refreshStats(); }
-    catch(e){ toast('Fehler: '+e.message,'err'); refreshAirlocks(); }
-  });
+  document.querySelectorAll('.statusSel').forEach(sel=>sel.onchange=()=>setStatus(sel.dataset.code, sel.value));
+  document.querySelectorAll('.printedBtn').forEach(b=>b.onclick=()=>setStatus(b.dataset.code,'printed'));
+  document.querySelectorAll('.hist').forEach(b=>b.onclick=()=>openHistory(b.dataset.code));
+}
+
+async function setStatus(code, status){
+  if(!status) return;
+  try{ await api('/v1/airlocks/'+code,{method:'PATCH',body:{status, force:forceOn()}});
+    toast('Status → '+status+(forceOn()?' (forciert)':''),'ok'); refreshStats(); refreshAirlocks(); }
+  catch(e){ toast('Fehler: '+e.message,'err'); refreshAirlocks(); }
 }
 
 async function generate(){
@@ -507,6 +555,7 @@ if($('#nfcSecNewCopy')) $('#nfcSecNewCopy').onclick = ()=>{ const t=$('#nfcSecNe
   if(t && navigator.clipboard){ navigator.clipboard.writeText(t); toast('Kopiert','ok'); } };
 if($('#nfcSecNewHide')) $('#nfcSecNewHide').onclick = ()=>{ $('#nfcSecNewBox').style.display='none'; $('#nfcSecNew').value=''; };
 $('#filterStatus').onchange = refreshAirlocks;
+if($('#forceToggle')) $('#forceToggle').onchange = refreshAirlocks;
 $('#apiKey').addEventListener('keydown',e=>{if(e.key==='Enter')connect();});
 $('#baseUrl').value = localStorage.getItem('airlock_base')||'';
 $('#apiKey').value = localStorage.getItem('airlock_key')||'';

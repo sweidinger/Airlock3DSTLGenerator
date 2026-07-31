@@ -124,6 +124,11 @@ class NfcSecretRestoreRequest(BaseModel):
 
 class StatusUpdate(BaseModel):
     status: str
+    force: bool = Field(
+        default=False,
+        description="Nur mit vollem API-Key: erzwingt einen sonst unerlaubten "
+                    "Uebergang (wird als 'forciert' im Verlauf protokolliert).",
+    )
 
     @field_validator("status")
     @classmethod

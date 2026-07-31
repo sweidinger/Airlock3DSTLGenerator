@@ -3,6 +3,25 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.10.0] - 2026-07-31
+### Hinzugefügt
+- **Erzwungener Status-Lebenszyklus**: Statuswechsel folgen jetzt der
+  Einzelschritt-Kette `reserved→generated→printed→registered→active→retired`
+  (`voided` als Off-Ramp aus jeder Vorstufe); unerlaubte Sprünge → **409**.
+  Der volle API-Key kann per `force:true` bewusst überschreiben (im Verlauf als
+  „forciert" markiert). `retired`/`voided` sind jetzt echt terminal.
+- **Tag-Schreiben erst ab `printed`**: `nfc/prepare` + `nfc/commit` verlangen den
+  Status `printed` (Ausnahme: bereits gebundene Locks fürs Neu-/Rückschreiben).
+  Auto-Promotion nur noch `printed → registered`.
+- **Status-Verlauf/Audit**: neue Tabelle + `GET /v1/airlocks/{code}/history` mit
+  Zeitstempel, Quelle (`system`/`app`/`api`) und Akteur je Änderung; Backfill für
+  bestehende Locks. Auch manuelle Dashboard-Änderungen werden protokolliert.
+- **Dashboard**: „Abhängigkeiten-Leiste" (Stepper) pro Lock, „gedruckt"-Knopf
+  (`generated→printed`), geführter Statuswechsel (nur erlaubte Ziele) +
+  „⚙ Erzwingen"-Schalter, Verlauf-Dialog mit Zeit + Auslöser.
+- **Writer-Key darf jetzt verifizieren** (`nfc/verify`) — für die Selbstkontrolle
+  der Writer-App nach dem Schreiben. Das HMAC-Secret bleibt serverseitig.
+
 ## [1.9.1] - 2026-07-31
 ### Behoben
 - Deploy: `AIRLOCK_BETA_TAG_MOVE` wird jetzt in `docker-compose.yml` an den

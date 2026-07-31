@@ -17,10 +17,24 @@ from typing import Iterable
 STATUSES = (
     "reserved", "generated", "printed", "registered", "active", "retired", "voided",
 )
-_TERMINAL = {"retired", "voided"}
+_TERMINAL = frozenset({"retired", "voided"})
 # Beim Beschreiben eines Tags (nfc/commit) wird der Status automatisch auf
-# 'registered' gehoben, sofern der Code noch auf einer dieser Vorstufen steht.
-_NFC_PROMOTE_FROM = ("reserved", "generated", "printed")
+# 'registered' gehoben — jetzt NUR aus 'printed' (Tag-Schreiben setzt „gedruckt"
+# voraus, durchgesetzt im API-Gate).
+_NFC_PROMOTE_FROM = ("printed",)
+
+# Erlaubte MANUELLE Uebergaenge via PATCH (update_status). Einzelschritt-Kette;
+# '→generated' (System/Render) und '→registered' (App/nfc-commit) sind bewusst
+# NICHT per PATCH erreichbar. 'voided' ist Off-Ramp aus jeder Vorstufe.
+ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
+    "reserved":   frozenset({"voided"}),
+    "generated":  frozenset({"printed", "voided"}),
+    "printed":    frozenset({"voided"}),
+    "registered": frozenset({"active", "voided"}),
+    "active":     frozenset({"retired"}),
+    "retired":    frozenset(),
+    "voided":     frozenset(),
+}
 
 
 def _now() -> str:
@@ -40,6 +54,14 @@ class TagBindingError(ValueError):
       * Die Tag-UID haengt noch an einem anderen Schloss und ein Umzug ist
         nicht erlaubt (kein `rebind` bzw. Beta-Umzug aus).
     Erbt von ValueError, damit bestehende Handler es weiter als 409 behandeln.
+    """
+
+
+class TransitionError(ValueError):
+    """Unerlaubter Status-Uebergang (fuehrt in der API zu HTTP 409).
+
+    Der Lebenszyklus ist eine Einzelschritt-Kette (s. ALLOWED_TRANSITIONS). Nur
+    der volle API-Key darf mit `force=True` bewusst ueberspringen.
     """
 
 
@@ -121,8 +143,62 @@ class Registry:
                     value      TEXT,
                     updated_at TEXT
                 );
+                CREATE TABLE IF NOT EXISTS status_history (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    code        TEXT NOT NULL,
+                    from_status TEXT,
+                    to_status   TEXT NOT NULL,
+                    at          TEXT NOT NULL,
+                    source      TEXT NOT NULL,   -- system | app | api
+                    actor       TEXT,            -- render / Key-Name / voll / backfill
+                    forced      INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS idx_history_code ON status_history(code);
                 """
             )
+            self._backfill_history()
+
+    def _backfill_history(self) -> None:
+        """Seedet den Status-Verlauf fuer bereits existierende Locks EINMALIG
+        (naeherungsweise aus created_at / nfc_written_at), sofern noch leer."""
+        have = self._conn.execute("SELECT COUNT(*) FROM status_history").fetchone()[0]
+        if have:
+            return
+        for a in self._conn.execute(
+            "SELECT code, status, created_at, nfc_written_at FROM airlocks"
+        ).fetchall():
+            ca, wa, st = a["created_at"], a["nfc_written_at"], a["status"]
+            rows = [(None, "reserved", ca, "system", "backfill"),
+                    ("reserved", "generated", ca, "system", "backfill")]
+            covered = {"reserved", "generated"}
+            if wa:
+                rows.append(("printed", "registered", wa, "app", "backfill"))
+                covered.add("registered")
+            if st not in covered and st != "reserved":
+                frm = "registered" if wa else "generated"
+                rows.append((frm, st, wa or ca, "api", "backfill"))
+            for frm, to, at, src, act in rows:
+                self._conn.execute(
+                    "INSERT INTO status_history(code,from_status,to_status,at,source,actor,forced)"
+                    " VALUES(?,?,?,?,?,?,0)",
+                    (a["code"], frm, to, at, src, act),
+                )
+
+    def _hist(self, code: str, frm: str | None, to: str, source: str,
+              actor: str | None = None, forced: bool = False) -> None:
+        """Schreibt eine Verlaufszeile. MUSS innerhalb eines gehaltenen
+        `self._lock`/`self._conn`-Blocks aufgerufen werden (kein erneutes Lock)."""
+        self._conn.execute(
+            "INSERT INTO status_history(code,from_status,to_status,at,source,actor,forced)"
+            " VALUES(?,?,?,?,?,?,?)",
+            (code, frm, to, _now(), source, actor, 1 if forced else 0),
+        )
+
+    def get_history(self, code: str) -> list[sqlite3.Row]:
+        return self._conn.execute(
+            "SELECT from_status, to_status, at, source, actor, forced"
+            " FROM status_history WHERE code=? ORDER BY id", (code,)
+        ).fetchall()
 
     # ---- Code-Vergabe -------------------------------------------------
     def _exists(self, code: str) -> bool:
@@ -190,6 +266,7 @@ class Registry:
                 (code, batch_id, "reserved", source, requested_by, _now(),
                  json.dumps(metadata or {})),
             )
+            self._hist(code, None, "reserved", "system", "reserve")
 
     def mark_generated(self, code: str, stl_path: str, sha256: str) -> None:
         with self._lock, self._conn:
@@ -197,6 +274,7 @@ class Registry:
                 "UPDATE airlocks SET status='generated', stl_path=?, stl_sha256=? WHERE code=?",
                 (stl_path, sha256, code),
             )
+            self._hist(code, "reserved", "generated", "system", "render")
 
     def finish_batch(self, batch_id: str, status: str, zip_path: str | None = None) -> None:
         with self._lock, self._conn:
@@ -205,15 +283,37 @@ class Registry:
                 (status, zip_path, batch_id),
             )
 
-    def update_status(self, code: str, status: str) -> sqlite3.Row:
+    def update_status(self, code: str, status: str, *, source: str = "api",
+                      actor: str | None = None, force: bool = False) -> sqlite3.Row:
+        """Setzt den Status mit Einzelschritt-Guard (s. ALLOWED_TRANSITIONS).
+
+        - Gleicher Status = No-op (kein Verlaufseintrag).
+        - Unerlaubter Uebergang → `TransitionError`, ausser `force=True`.
+        - Jede echte Aenderung schreibt eine Verlaufszeile (mit `source`/`actor`;
+          `forced=True`, wenn nur dank force durchgelassen).
+        """
         if status not in STATUSES:
             raise ValueError(f"Ungueltiger Status: {status}")
         with self._lock, self._conn:
-            cur = self._conn.execute(
+            row = self._conn.execute(
+                "SELECT status FROM airlocks WHERE code=?", (code,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(code)
+            cur = row["status"]
+            if cur == status:
+                return self.get_airlock(code)          # No-op
+            allowed = status in ALLOWED_TRANSITIONS.get(cur, frozenset())
+            if not allowed and not force:
+                nxt = sorted(ALLOWED_TRANSITIONS.get(cur, frozenset())) or ["—"]
+                raise TransitionError(
+                    f"Uebergang {cur} → {status} nicht erlaubt "
+                    f"(erlaubt ab {cur}: {', '.join(nxt)}). Nur mit force."
+                )
+            self._conn.execute(
                 "UPDATE airlocks SET status=? WHERE code=?", (status, code)
             )
-            if cur.rowcount == 0:
-                raise KeyError(code)
+            self._hist(code, cur, status, source, actor, forced=not allowed)
         return self.get_airlock(code)
 
     # ---- NFC ----------------------------------------------------------
@@ -223,7 +323,7 @@ class Registry:
         ).fetchone()
 
     def set_nfc(self, code: str, uid: str, rebind: bool = False,
-                allow_tag_move: bool = False) -> dict:
+                allow_tag_move: bool = False, actor: str | None = None) -> dict:
         """Bindet eine Tag-UID an einen Code ('verheiraten').
 
         Grundregel (Produktion): Eine Bindung ist **endgueltig**. Ist der Code
@@ -285,6 +385,8 @@ class Registry:
                     " WHERE code=?",
                     (uid, _now(), code),
                 )
+                self._hist(code, row["status"], "registered", "app",
+                           actor or "writer")
             else:
                 self._conn.execute(
                     "UPDATE airlocks SET nfc_uid=?, nfc_written_at=? WHERE code=?",

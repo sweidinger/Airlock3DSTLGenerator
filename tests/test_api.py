@@ -7,6 +7,15 @@ client = TestClient(app)
 AUTH = {"X-API-Key": "test-key"}
 
 
+def _printed_code():
+    """Generiert einen Lock und setzt ihn auf 'printed' (bereit zum Tag-Schreiben)."""
+    code = client.post("/v1/airlocks:generate", json={"count": 1},
+                       headers=AUTH).json()["airlocks"][0]["code"]
+    r = client.patch(f"/v1/airlocks/{code}", json={"status": "printed"}, headers=AUTH)
+    assert r.status_code == 200, r.text
+    return code
+
+
 def test_health_no_auth():
     assert client.get("/healthz").json()["status"] == "ok"
     assert client.get("/readyz").json()["status"] == "ready"
@@ -226,6 +235,8 @@ def test_nfc_tag_binding():
     code = b["airlocks"][0]["code"]
     uid = "04:11:22:33:44:55:80"
 
+    # Tag-Schreiben erst ab 'printed'
+    client.patch(f"/v1/airlocks/{code}", json={"status": "printed"}, headers=AUTH)
     p = client.post(f"/v1/airlocks/{code}/nfc/prepare", json={"uid": uid}, headers=AUTH)
     assert p.status_code == 200, p.text
     pj = p.json()
@@ -254,8 +265,7 @@ def test_nfc_tag_binding():
     assert clone["valid"] is False
 
     # dieselbe UID an einen anderen Code binden -> Konflikt
-    b2 = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()
-    code2 = b2["airlocks"][0]["code"]
+    code2 = _printed_code()
     assert client.post(f"/v1/airlocks/{code2}/nfc/commit", json={"uid": uid}, headers=AUTH).status_code == 409
 
     # Auth
@@ -294,7 +304,8 @@ def test_kg_keys_and_scoped_access():
     code = b["airlocks"][0]["code"]
     assert client.get("/v1/airlocks", headers=KG).status_code == 200
     assert client.get(f"/v1/airlocks/{code}", headers=KG).status_code == 200
-    assert client.patch(f"/v1/airlocks/{code}", json={"status": "active"}, headers=KG).status_code == 200
+    # generated → printed ist ein erlaubter Einzelschritt (KG-Key darf Status setzen)
+    assert client.patch(f"/v1/airlocks/{code}", json={"status": "printed"}, headers=KG).status_code == 200
 
     # KG-Key darf NICHT generieren / STL laden / Tag schreiben / Keys verwalten
     assert client.post("/v1/airlocks:generate", json={"count": 1}, headers=KG).status_code == 401
@@ -325,8 +336,7 @@ def test_kg_regenerate():
 
 
 def test_kg_verify_require_status():
-    b = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()
-    code = b["airlocks"][0]["code"]
+    code = _printed_code()
     uid = "04AABBCCDDEE80"
     tok = client.post(f"/v1/airlocks/{code}/nfc/prepare", json={"uid": uid}, headers=AUTH).json()["token"]
     client.post(f"/v1/airlocks/{code}/nfc/commit", json={"uid": uid}, headers=AUTH)
@@ -350,7 +360,8 @@ def test_available_filter():
     code = b["airlocks"][0]["code"]
     # frisch (kein Tag) -> nicht verfuegbar
     assert all(a["code"] != code for a in client.get("/v1/airlocks?available=true", headers=AUTH).json())
-    # Tag binden -> verfuegbar
+    # drucken, dann Tag binden -> verfuegbar
+    client.patch(f"/v1/airlocks/{code}", json={"status": "printed"}, headers=AUTH)
     client.post(f"/v1/airlocks/{code}/nfc/commit", json={"uid": "04CAFEBABE1280"}, headers=AUTH)
     assert any(a["code"] == code for a in client.get("/v1/airlocks?available=true", headers=AUTH).json())
     # aktiv -> nicht mehr verfuegbar
@@ -391,8 +402,7 @@ def test_nfc_secret_management():
     assert client.get("/v1/nfc/secret/status", headers=AUTH).json()["source"] == "db"
 
     # Das effektive Secret wird tatsaechlich fuer Tokens genutzt
-    b = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()
-    code = b["airlocks"][0]["code"]
+    code = _printed_code()
     uid = "04ABCDEF120380"
     p = client.post(f"/v1/airlocks/{code}/nfc/prepare", json={"uid": uid}, headers=AUTH).json()
     assert p["secret_configured"] is True
@@ -445,20 +455,22 @@ def test_writer_keys_and_scoped_access():
     b = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()
     code = b["airlocks"][0]["code"]
     uid = "0455667788AA80"
+    client.patch(f"/v1/airlocks/{code}", json={"status": "printed"}, headers=AUTH)  # erst drucken
     assert client.get("/v1/airlocks", headers=WR).status_code == 200
     assert client.get(f"/v1/airlocks/{code}", headers=WR).status_code == 200
     assert client.post(f"/v1/airlocks/{code}/nfc/prepare", json={"uid": uid}, headers=WR).status_code == 200
     cm = client.post(f"/v1/airlocks/{code}/nfc/commit", json={"uid": uid}, headers=WR)
     assert cm.status_code == 200 and cm.json()["nfc_uid"] == "0455667788AA80"
 
-    # Writer-Key darf NICHT generieren / STL laden / Status setzen / verifizieren / Keys verwalten
+    # Writer-Key darf NICHT generieren / STL laden / Status setzen / Keys verwalten
     assert client.post("/v1/airlocks:generate", json={"count": 1}, headers=WR).status_code == 401
     assert client.get(f"/v1/airlocks/{code}/stl", headers=WR).status_code == 401
     assert client.patch(f"/v1/airlocks/{code}", json={"status": "active"}, headers=WR).status_code == 401
-    assert client.post(f"/v1/airlocks/{code}/nfc/verify",
-                       json={"uid": uid, "token": "x"}, headers=WR).status_code == 401
     assert client.post("/v1/writer/keys", json={"name": "x"}, headers=WR).status_code == 401
     assert client.get("/v1/stats", headers=WR).status_code == 401
+    # Writer-Key DARF jetzt verifizieren (v1.10.0, Selbstkontrolle nach dem Schreiben)
+    vw = client.post(f"/v1/airlocks/{code}/nfc/verify", json={"uid": uid, "token": "x"}, headers=WR)
+    assert vw.status_code == 200 and vw.json()["valid"] is False
 
     # Ein KG-Key darf umgekehrt NICHT schreiben (Scopes bleiben getrennt)
     KG = {"X-API-Key": client.post("/v1/kg/keys", json={"name": "K"}, headers=AUTH).json()["key"]}
@@ -496,8 +508,7 @@ def test_writer_key_in_debug_log():
 
 
 def test_nfc_marriage_permanent_and_rebind():
-    b = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()
-    code = b["airlocks"][0]["code"]
+    code = _printed_code()
     uid_x = "04AA11BB22CC80"
     uid_y = "04DD33EE44FF80"
 
@@ -523,8 +534,7 @@ def test_nfc_marriage_permanent_and_rebind():
 
     # Tag von einem anderen Schloss "wegnehmen" ist ohne Beta-Flag verboten,
     # auch mit rebind (uid_y haengt jetzt an `code`).
-    b2 = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()
-    code2 = b2["airlocks"][0]["code"]
+    code2 = _printed_code()
     assert client.post(f"/v1/airlocks/{code2}/nfc/commit",
                        json={"uid": uid_y, "rebind": True}, headers=AUTH).status_code == 409
 
@@ -542,6 +552,8 @@ def test_registry_rebind_and_tag_move(tmp_path):
     uid_a = "04AABBCCDDEE80"
     uid_b = "04FF00112233A0"
 
+    # Promotion zu registered erfolgt nur aus 'printed' -> Testaufbau forcen
+    reg.update_status("11111", "printed", force=True)
     res = reg.set_nfc("11111", uid_a)
     assert res["row"]["status"] == "registered"
     assert res["row"]["nfc_uid"] == uid_a
@@ -568,3 +580,71 @@ def test_registry_rebind_and_tag_move(tmp_path):
     assert reg.get_airlock("22222")["nfc_uid"] == uid_b
     assert reg.get_airlock("11111")["nfc_uid"] is None
     reg.close()
+
+
+def test_status_transition_guard():
+    code = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()["airlocks"][0]["code"]
+    # unerlaubter Sprung generated -> active
+    assert client.patch(f"/v1/airlocks/{code}", json={"status": "active"}, headers=AUTH).status_code == 409
+    # erlaubter Einzelschritt generated -> printed
+    assert client.patch(f"/v1/airlocks/{code}", json={"status": "printed"}, headers=AUTH).status_code == 200
+    # zurueck ohne force -> 409
+    assert client.patch(f"/v1/airlocks/{code}", json={"status": "generated"}, headers=AUTH).status_code == 409
+    # zurueck MIT force (voller Key) -> 200
+    assert client.patch(f"/v1/airlocks/{code}",
+                        json={"status": "generated", "force": True}, headers=AUTH).status_code == 200
+    # Off-Ramp generated -> voided
+    assert client.patch(f"/v1/airlocks/{code}", json={"status": "voided"}, headers=AUTH).status_code == 200
+    # terminal: raus nur mit force
+    assert client.patch(f"/v1/airlocks/{code}", json={"status": "active"}, headers=AUTH).status_code == 409
+    assert client.patch(f"/v1/airlocks/{code}",
+                        json={"status": "active", "force": True}, headers=AUTH).status_code == 200
+
+    # force wird fuer NICHT-vollen Key ignoriert (KG-Key kann nicht erzwingen)
+    KG = {"X-API-Key": client.post("/v1/kg/keys", json={"name": "F"}, headers=AUTH).json()["key"]}
+    c2 = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()["airlocks"][0]["code"]
+    assert client.patch(f"/v1/airlocks/{c2}",
+                        json={"status": "active", "force": True}, headers=KG).status_code == 409
+
+
+def test_tag_gate_requires_printed():
+    code = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()["airlocks"][0]["code"]
+    uid = "0412ABCDEF3480"
+    # generated (kein Tag) -> prepare/commit abgelehnt
+    assert client.post(f"/v1/airlocks/{code}/nfc/prepare", json={"uid": uid}, headers=AUTH).status_code == 409
+    assert client.post(f"/v1/airlocks/{code}/nfc/commit", json={"uid": uid}, headers=AUTH).status_code == 409
+    # printed -> erlaubt, bindet + hebt auf registered
+    client.patch(f"/v1/airlocks/{code}", json={"status": "printed"}, headers=AUTH)
+    assert client.post(f"/v1/airlocks/{code}/nfc/prepare", json={"uid": uid}, headers=AUTH).status_code == 200
+    cm = client.post(f"/v1/airlocks/{code}/nfc/commit", json={"uid": uid}, headers=AUTH)
+    assert cm.status_code == 200 and cm.json()["status"] == "registered"
+    # re-commit desselben Tags auf bereits gebundenem (registered) Lock -> weiter erlaubt
+    assert client.post(f"/v1/airlocks/{code}/nfc/commit", json={"uid": uid}, headers=AUTH).status_code == 200
+
+
+def test_status_history():
+    code = client.post("/v1/airlocks:generate", json={"count": 1}, headers=AUTH).json()["airlocks"][0]["code"]
+    uid = "04A1B2C3D4E5F0"
+    client.patch(f"/v1/airlocks/{code}", json={"status": "printed"}, headers=AUTH)
+    client.post(f"/v1/airlocks/{code}/nfc/commit", json={"uid": uid}, headers=AUTH)
+    client.patch(f"/v1/airlocks/{code}", json={"status": "active"}, headers=AUTH)
+
+    h = client.get(f"/v1/airlocks/{code}/history", headers=AUTH)
+    assert h.status_code == 200
+    entries = h.json()
+    assert [e["to"] for e in entries] == ["reserved", "generated", "printed", "registered", "active"]
+    by_to = {e["to"]: e for e in entries}
+    assert by_to["reserved"]["source"] == "system"
+    assert by_to["generated"]["source"] == "system"
+    assert by_to["printed"]["source"] == "api"
+    assert by_to["registered"]["source"] == "app"       # Tag geschrieben (App)
+    assert by_to["active"]["source"] == "api"
+    assert all(e["forced"] is False for e in entries)
+
+    # forcierter Uebergang wird als forced=True markiert
+    client.patch(f"/v1/airlocks/{code}", json={"status": "generated", "force": True}, headers=AUTH)
+    last = client.get(f"/v1/airlocks/{code}/history", headers=AUTH).json()[-1]
+    assert last["to"] == "generated" and last["forced"] is True
+
+    # history braucht Lesezugriff
+    assert client.get(f"/v1/airlocks/{code}/history").status_code == 401
