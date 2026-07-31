@@ -3,6 +3,13 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.9.1] - 2026-07-31
+### Behoben
+- Deploy: `AIRLOCK_BETA_TAG_MOVE` wird jetzt in `docker-compose.yml` an den
+  Container durchgereicht (die `environment:`-Liste ist explizit). Ohne diese
+  Zeile blieb der Beta-Tag-Umzug aus v1.9.0 im Container wirkungslos, auch wenn
+  das Flag in der `.env` stand.
+
 ## [1.9.0] - 2026-07-31
 ### Geändert
 - **Tag-Bindung ist jetzt endgültig** („einmal verheiratet, bleibt verheiratet"):
