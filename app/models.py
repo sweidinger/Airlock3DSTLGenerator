@@ -47,7 +47,7 @@ class ThreeMFRequest(BaseModel):
     """Mehrfarb-Export: entweder `codes` ODER `batch_id`."""
     codes: Optional[list[str]] = Field(default=None, description="Konkrete Codes für den Export")
     batch_id: Optional[str] = Field(default=None, description="Alle Airlocks dieses Batches exportieren")
-    format: str = Field(default="3mf", description="Ausgabeformat: '3mf' (Farbe) oder 'obj' (Farbe)")
+    format: str = Field(default="3mf", description="Ausgabeformat: '3mf' (Farbe), 'obj' (Farbe) oder 'p1s' (druckfertiges Bambu-P1S-Projekt mit Pause bei 3mm)")
     plate: Optional[float] = Field(default=None, gt=0, description="Bauplatten-Kantenlänge in mm (Default 256)")
     margin: Optional[float] = Field(default=None, ge=0, description="Randabstand in mm")
     gap: Optional[float] = Field(default=None, ge=0, description="Lücke zwischen den Teilen in mm")
@@ -56,8 +56,8 @@ class ThreeMFRequest(BaseModel):
     @classmethod
     def _fmt_ok(cls, v: str) -> str:
         v = (v or "3mf").lower()
-        if v not in ("3mf", "obj"):
-            raise ValueError("format muss '3mf' oder 'obj' sein.")
+        if v not in ("3mf", "obj", "p1s"):
+            raise ValueError("format muss '3mf', 'obj' oder 'p1s' sein.")
         return v
 
     @model_validator(mode="after")

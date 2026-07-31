@@ -112,8 +112,8 @@ class AirlockService:
         einem Batch; Body- und Code-Teil werden je Code frisch gerendert.
         """
         fmt = (fmt or "3mf").lower()
-        if fmt not in ("3mf", "obj"):
-            raise ValueError("format muss '3mf' oder 'obj' sein.")
+        if fmt not in ("3mf", "obj", "p1s"):
+            raise ValueError("format muss '3mf', 'obj' oder 'p1s' sein.")
         if batch_id:
             rows = self.registry.airlocks_of_batch(batch_id)
             code_list = [r["code"] for r in rows]
@@ -144,6 +144,29 @@ class AirlockService:
             out_dir = Path(self.cfg.output_dir)
             out_dir.mkdir(parents=True, exist_ok=True)
             token = "tmf_" + uuid.uuid4().hex[:12]
+
+            if fmt == "p1s":
+                # Druckfertiges Bambu-P1S-Projekt: zweifarbig + Pause bei 3 mm.
+                from .p1s_project import build_p1s_project_3mf
+                out_path = out_dir / f"{token}.3mf"
+                pres = build_p1s_project_3mf(items, out_path)
+                data = out_path.read_bytes()
+                return {
+                    "file": out_path.name,
+                    "format": "p1s",
+                    "download_url": f"/v1/threemf/{out_path.name}",
+                    "count": pres.count,
+                    "codes": code_list,
+                    "cols": pres.cols,
+                    "rows": pres.rows,
+                    "plate": 256.0,
+                    "fits_on_plate": pres.fits,
+                    "printer": "Bambu Lab P1S 0.4",
+                    "pause_at_mm": 3.0,
+                    "sha256": __import__("hashlib").sha256(data).hexdigest(),
+                    "bytes": len(data),
+                }
+
             out_path = out_dir / f"{token}.{fmt}"
             builder = build_obj if fmt == "obj" else build_3mf
             res = builder(

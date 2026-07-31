@@ -3,6 +3,19 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.13.0] - 2026-07-31
+### Hinzugefügt
+- **Druckfertiger P1S-Projekt-Export** (`format: "p1s"` bei `POST /v1/airlocks:threemf`,
+  Dashboard: „P1S-Projekt (Pause 3 mm)"). Erzeugt statt eines reinen Modell-3MF ein
+  vollwertiges **Bambu-Studio-P1S-Projekt**: eingebettetes P1S-0.4-Druckerprofil,
+  zweifarbig (Korpus/Nummer via `paint_color`), Locks im Raster angeordnet (links vom
+  Prime Tower bei x=205/y=150) und eine **Druck-Pause bei 3 mm** (`M400 U1` mit
+  Displaymeldung „Tag(s) einlegen, dann fortsetzen") bereits eingebaut — zum Einlegen
+  der NFC-Tags während der Druckpause. Neues Modul `app/p1s_project.py`; statische
+  Profilteile als Golden Template unter `app/templates/p1s/`. Fix auf den P1S.
+- (Später geplant: Projekt-Details wie Name/Beschreibung/Accessories automatisch
+  mit ausfüllen.)
+
 ## [1.12.0] - 2026-07-31
 ### Geändert
 - **Neue Standard-Vorlage `DisposableLock_NTAG213.stl`** ersetzt `DisposableLock_v2`

@@ -77,3 +77,35 @@ def test_deterministic(tmp_path):
     a = g.render("10098", out_path=tmp_path / "a.stl")
     b = g.render("10098", out_path=tmp_path / "b.stl")
     assert a.sha256 == b.sha256
+
+
+def test_p1s_project_3mf(tmp_path):
+    """P1S-Projekt-3MF: Bambu-Projektstruktur, zweifarbig, Pause bei 3 mm."""
+    import zipfile
+    from app import threemf, p1s_project
+
+    g = Generator()
+    items = []
+    for c in ["73412", "10098", "24680"]:
+        b = g.render(c, out_path=tmp_path / f"{c}_b.stl", part="body")
+        cc = g.render(c, out_path=tmp_path / f"{c}_c.stl", part="code")
+        items.append(threemf.Airlock3MFItem(c, b.path, cc.path))
+    res = p1s_project.build_p1s_project_3mf(items, tmp_path / "p1s.3mf")
+    assert res.count == 3 and res.fits
+
+    z = zipfile.ZipFile(res.path)
+    names = set(z.namelist())
+    for req in ("3D/3dmodel.model", "3D/_rels/3dmodel.model.rels",
+                "Metadata/project_settings.config", "Metadata/model_settings.config",
+                "Metadata/custom_gcode_per_layer.xml", "3D/Objects/object_1.model",
+                "3D/Objects/object_3.model"):
+        assert req in names, f"fehlt: {req}"
+
+    # Pause bei 3 mm (M400 U1, type=1 = Pause)
+    cg = z.read("Metadata/custom_gcode_per_layer.xml").decode()
+    assert 'top_z="3"' in cg and "M400 U1" in cg and 'type="1"' in cg
+    # P1S-Profil eingebettet
+    assert "Bambu Lab P1S" in z.read("Metadata/project_settings.config").decode()
+    # Zweifarbig via paint_color (Body 1C, Nummer 0C)
+    o1 = z.read("3D/Objects/object_1.model").decode()
+    assert 'paint_color="1C"' in o1 and 'paint_color="0C"' in o1

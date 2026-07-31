@@ -96,7 +96,8 @@ async function threemfExport(body, btn){
   try{
     const j = await api('/v1/airlocks:threemf',{method:'POST',body});
     const f = (j.format||fmt);
-    download(j.download_url, 'airlocks_'+j.count+'.'+f);
+    const ext = (f==='p1s') ? '3mf' : f;   // P1S-Projekt ist eine .3mf-Datei
+    download(j.download_url, 'airlocks_'+j.count+'.'+ext);
     const grid = `Raster ${j.cols}×${j.rows}`;
     const F = f.toUpperCase();
     if(!j.fits_on_plate) toast(`${F}: ${j.count} Airlock(s), ${grid} — passt NICHT auf eine ${j.plate}-mm-Platte!`,'err');
