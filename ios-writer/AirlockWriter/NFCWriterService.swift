@@ -18,6 +18,11 @@ final class NFCWriterService: NSObject, ObservableObject, NFCTagReaderSessionDel
 
     struct WriteResult { let code: String; let uid: String }
 
+    /// Reicht die nicht-Sendable Core-NFC-Objekte (`NFCTagReaderSession`,
+    /// `NFCMiFareTag`) in den async-Kontext, ohne sie direkt einzufangen.
+    /// Sicher, weil Core NFC sie seriell auf einer einzigen Queue liefert.
+    private struct SendableBox<T>: @unchecked Sendable { let value: T }
+
     private var session: NFCTagReaderSession?
     private var api: AirlockAPI?
     private var code: String = ""
@@ -56,14 +61,17 @@ final class NFCWriterService: NSObject, ObservableObject, NFCTagReaderSessionDel
             session.invalidate(errorMessage: "Nicht unterstützter Tag-Typ (NTAG213/216 verwenden).")
             return
         }
+        // session/mifare gebündelt durch die Box reichen -> keine nicht-Sendable Captures.
+        let box = SendableBox(value: (session: session, mifare: mifare))
         session.connect(to: tag) { [weak self] error in
             guard let self else { return }
+            let session = box.value.session
             if let error {
                 session.invalidate(errorMessage: "Verbindung fehlgeschlagen: \(error.localizedDescription)")
                 return
             }
-            let uid = UID.hex(from: mifare.identifier)
-            Task { await self.handle(mifare: mifare, uid: uid, session: session) }
+            let uid = UID.hex(from: box.value.mifare.identifier)
+            Task { await self.handle(mifare: box.value.mifare, uid: uid, session: box.value.session) }
         }
     }
 
