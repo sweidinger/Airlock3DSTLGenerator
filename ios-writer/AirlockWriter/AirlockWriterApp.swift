@@ -6,7 +6,7 @@ struct AirlockWriterApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootTabView()
                 .environmentObject(settings)
         }
     }

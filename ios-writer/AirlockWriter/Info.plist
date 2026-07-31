@@ -36,6 +36,10 @@
 	<key>NFCReaderUsageDescription</key>
 	<string>Zum Beschreiben der Airlock-NFC-Tags.</string>
 
+	<!-- Pflicht fuer die Kamera: Erfassen/Erkennen der aufgedruckten Lock-Nummer. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Zum Abfotografieren und Erkennen der aufgedruckten Lock-Nummer.</string>
+
 	<!-- Export-Compliance: App nutzt nur Standard-HTTPS (exempt) -> kein Prompt beim Upload. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>

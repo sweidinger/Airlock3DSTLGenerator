@@ -1,5 +1,19 @@
 import SwiftUI
 
+/// Wurzel-Ansicht: zwei Tabs — „Drucken" (Kamera-Verifikation generated -> printed)
+/// und „Schreiben" (bestehender Tag-Writer). Beide teilen den SettingsStore aus
+/// der Umgebung.
+struct RootTabView: View {
+    var body: some View {
+        TabView {
+            PrintVerifyView()
+                .tabItem { Label("Drucken", systemImage: "camera.viewfinder") }
+            ContentView()
+                .tabItem { Label("Schreiben", systemImage: "square.and.pencil") }
+        }
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject var settings: SettingsStore
     @StateObject private var writer = NFCWriterService()

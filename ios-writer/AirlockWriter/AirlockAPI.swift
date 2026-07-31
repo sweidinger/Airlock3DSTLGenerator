@@ -104,4 +104,24 @@ struct AirlockAPI {
         do { return try JSONDecoder().decode(VerifyResult.self, from: data) }
         catch { throw APIError.decoding("\(error)") }
     }
+
+    /// Markiert ein Lock als gedruckt (generated -> printed) und laedt das per
+    /// Live-Kamera aufgenommene Beleg-Foto hoch (multipart/form-data, Feld `photo`).
+    /// Endpunkt: `POST /v1/airlocks/{code}/mark-printed` (Writer-Scope, ab v1.14.0).
+    @discardableResult
+    func markPrinted(code: String, jpeg: Data) async throws -> Data {
+        var req = try makeRequest("/v1/airlocks/\(code)/mark-printed", method: "POST")
+        let boundary = "airlock-\(UUID().uuidString)"
+        req.setValue("multipart/form-data; boundary=\(boundary)",
+                     forHTTPHeaderField: "Content-Type")
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"photo\"; filename=\"\(code).jpg\"\r\n"
+                        .data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(jpeg)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        req.httpBody = body
+        return try await run(req)
+    }
 }
