@@ -112,3 +112,18 @@ def test_p1s_project_3mf(tmp_path):
     # Zweifarbig via paint_color (Body 1C, Nummer 0C)
     o1 = z.read("3D/Objects/object_1.model").decode()
     assert 'paint_color="1C"' in o1 and 'paint_color="0C"' in o1
+
+    # Jede Komponente muss auf eine EXISTIERENDE Objektdatei zeigen, die das
+    # referenzierte objectid auch enthaelt (sonst laedt Bambu nur 1 Lock).
+    import re
+    assembly = z.read("3D/3dmodel.model").decode()
+    comps = re.findall(r'<component p:path="([^"]+)" objectid="(\d+)"', assembly)
+    assert len(comps) == 3, f"erwartet 3 Komponenten, gefunden {len(comps)}"
+    for path, oid in comps:
+        inner = path.lstrip("/")
+        assert inner in names, f"Komponentendatei fehlt: {inner}"
+        assert f'<object id="{oid}"' in z.read(inner).decode(), \
+            f"{inner} enthaelt kein object id={oid}"
+    # Alle Locks stehen an unterschiedlichen Bett-Positionen (kein Stapeln).
+    item_pos = re.findall(r'<item objectid="\d+"[^>]*transform="[^"]* (\S+) (\S+) 2"', assembly)
+    assert len(set(item_pos)) == 3, f"Positionen nicht eindeutig: {item_pos}"

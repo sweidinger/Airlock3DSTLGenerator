@@ -3,6 +3,17 @@
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/).
 
+## [1.16.0] - 2026-07-31
+### Behoben
+- **P1S-Projekt-Export mit mehreren Locks**: Im Assembly-`3dmodel.model` zeigte die
+  Komponenten-Referenz über `p:path="…/object_{comp_oid}.model"` auf den falschen
+  Datei-Index (`comp_oid` statt Lauf-Index `k`). Dadurch lud Bambu Studio nur den
+  ersten Lock, alle weiteren wurden zwar in der Objektliste geführt, blieben aber
+  ohne Geometrie auf dem Bett. Fix: `p:path` nutzt `object_{(comp_oid+1)//2}.model`.
+  Der Test `test_p1s_project_3mf` prüft jetzt, dass jede Komponente auf eine
+  existierende Objektdatei mit passender `objectid` verweist und alle Locks an
+  eindeutigen Bett-Positionen liegen.
+
 ## [1.15.0] - 2026-07-31
 ### Geändert
 - **Tag-Tasche tiefer gelegt** (NTAG213-Vorlage V2): Boden von Druckhöhe 2,79 auf

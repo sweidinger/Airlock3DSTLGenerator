@@ -105,8 +105,11 @@ def _assembly_model_xml(objs: list[tuple[int, str, int, float, float]]) -> str:
          '<metadata name="ModificationDate">2026-01-01</metadata>\n',
          '<resources>\n']
     for comp_oid, code, obj_oid, px, py in objs:
+        # Objektdatei ist object_{k}.model (k = Lauf-Index), NICHT object_{comp_oid}.
+        # comp_oid = 2k-1  ->  k = (comp_oid + 1) // 2.
+        file_k = (comp_oid + 1) // 2
         m.append(f'<object id="{obj_oid}" p:UUID="{_uid("wrap", obj_oid)}" type="model">\n'
-                 f'<components>\n<component p:path="/3D/Objects/object_{comp_oid}.model" '
+                 f'<components>\n<component p:path="/3D/Objects/object_{file_k}.model" '
                  f'objectid="{comp_oid}" p:UUID="{_uid("comp", comp_oid)}" '
                  f'transform="1 0 0 0 1 0 0 0 1 0 0 0"/>\n</components>\n</object>\n')
     m.append(f'</resources>\n<build p:UUID="{_uid("build")}">\n')
